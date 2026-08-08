@@ -1,0 +1,20 @@
+[project]
+name = "neuropil-prep"
+version = "0.1.0"
+description = "One-time data prep and reference runs for Neuropil"
+requires-python = "==3.11.*"
+dependencies = [
+    "numpy>=1.24,<2",
+    "pandas>=2.0,<3",
+    "pyarrow>=14,<17",
+]
+
+[dependency-groups]
+# Shiu et al. pin brian2 2.5.1, which has no wheels; any 2.x runs their model.py unchanged.
+reference = [
+    "brian2>=2.5,<3",
+    "joblib",
+]
+
+[tool.uv]
+package = false
