@@ -1,7 +1,7 @@
 namespace Neuropil.Core;
 
 // Follows Brian2's schedule each step: state update, threshold, synapses, reset.
-// Refractory neurons are frozen.
+// Refractory neurons are frozen and drop all input, as Brian2 2.9 does.
 public sealed class ArraySimulator
 {
     readonly Brain _brain;
@@ -118,12 +118,12 @@ public sealed class ArraySimulator
         for (int i = 0; i < n; i++)
         {
             if (inbox[i] == 0) continue;
-            _g[i] += inbox[i] * w;
+            if (_notRefractory[i]) _g[i] += inbox[i] * w;
             inbox[i] = 0;
         }
 
         foreach (var (i, threshold) in _poisson)
-            if (Rng.Draw(_seed, Trial, _brain.FlywireIds[i], t) < threshold) _v[i] += _p.PoissonKick;
+            if (_notRefractory[i] && Rng.Draw(_seed, Trial, _brain.FlywireIds[i], t) < threshold) _v[i] += _p.PoissonKick;
 
         foreach (int i in _spiked)
         {

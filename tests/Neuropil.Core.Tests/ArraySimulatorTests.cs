@@ -31,13 +31,24 @@ public class ArraySimulatorTests
         Assert.Equal(expected, sim.Voltage[0], 1e-9);
     }
 
+    // Expected spike steps below come from Brian2 2.9 on the same two-neuron circuit.
+
     [Fact]
-    public void Spikes_arrive_after_the_delay_and_refractory_period_freezes_the_neuron()
+    public void Strong_input_fires_after_the_delay_and_refractory_drops_input()
     {
         var sim = new ArraySimulator(Brain.FromEdges(2, [(0, 1, 30000)]));
         sim.Stimulate([0], Always);
 
-        Assert.Equal([20, 43, 66, 89], SpikeSteps(sim, 1, 100));
+        Assert.Equal([20, 44, 68, 92], SpikeSteps(sim, 1, 100));
+    }
+
+    [Fact]
+    public void Moderate_input_matches_brian2_spike_times()
+    {
+        var sim = new ArraySimulator(Brain.FromEdges(2, [(0, 1, 397)]));
+        sim.Stimulate([0], Always);
+
+        Assert.Equal([26, 56], SpikeSteps(sim, 1, 80));
     }
 
     [Fact]
