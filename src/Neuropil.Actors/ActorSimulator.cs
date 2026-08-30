@@ -1,0 +1,37 @@
+using Akka.Actor;
+using Akka.Configuration;
+using Neuropil.Core;
+
+namespace Neuropil.Actors;
+
+public sealed class ActorSimulator : IAsyncDisposable
+{
+    readonly ActorSystem _system;
+    readonly IActorRef _clock;
+
+    public ActorSimulator(
+        Brain brain,
+        IEnumerable<int> stimulated,
+        LifParams? p = null,
+        ulong seed = 0,
+        int trial = 0,
+        double? rateHz = null,
+        IEnumerable<int>? silenced = null)
+    {
+        _system = ActorSystem.Create("neuropil", ConfigurationFactory.ParseString("""
+            akka.loglevel = WARNING
+            akka.stdout-loglevel = WARNING
+            """));
+        var setup = new ClockActor.Setup(brain, p ?? LifParams.Default, seed, trial,
+            [.. stimulated], rateHz, [.. silenced ?? []]);
+        _clock = _system.ActorOf(Props.Create(() => new ClockActor(setup)), "clock");
+    }
+
+    public async Task<IReadOnlyList<(long Step, int Neuron)>> RunAsync(long steps)
+    {
+        var result = await _clock.Ask<RunResult>(new Run(steps), TimeSpan.FromHours(1));
+        return result.Spikes;
+    }
+
+    public async ValueTask DisposeAsync() => await _system.Terminate();
+}

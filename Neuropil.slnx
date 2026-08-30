@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Neuropil.Actors/Neuropil.Actors.csproj" />
     <Project Path="src/Neuropil.Cli/Neuropil.Cli.csproj" />
     <Project Path="src/Neuropil.Core/Neuropil.Core.csproj" />
   </Folder>
