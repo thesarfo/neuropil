@@ -42,6 +42,22 @@ public sealed class Brain
             sorted.Select(e => e.Weight).ToArray());
     }
 
+    public Brain Subset(IReadOnlyList<int> neurons)
+    {
+        var newIndex = new Dictionary<int, int>();
+        for (int i = 0; i < neurons.Count; i++) newIndex[neurons[i]] = i;
+
+        var edges = new List<(int, int, short)>();
+        for (int i = 0; i < neurons.Count; i++)
+        {
+            var targets = TargetsOf(neurons[i]);
+            var weights = WeightsOf(neurons[i]);
+            for (int k = 0; k < targets.Length; k++)
+                if (newIndex.TryGetValue(targets[k], out int post)) edges.Add((i, post, weights[k]));
+        }
+        return FromEdges(neurons.Count, edges, [.. neurons.Select(i => FlywireIds[i])]);
+    }
+
     public static Brain Load(string path)
     {
         using var stream = File.OpenRead(path);
