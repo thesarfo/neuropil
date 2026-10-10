@@ -19,7 +19,8 @@ public sealed class NeuronActor : ReceiveActor
     readonly LifParams _p;
     readonly long _flywireId;
     readonly double _decayV, _decayG, _gToV;
-    readonly int _refractorySteps;
+    int _refractorySteps;
+    ulong _poissonThreshold;
 
     double _v, _g;
     long _lastSpike = long.MinValue / 2;
@@ -39,13 +40,20 @@ public sealed class NeuronActor : ReceiveActor
         _p = s.P;
         _flywireId = s.Brain.FlywireIds[s.Index];
         (_decayV, _decayG, _gToV) = (_p.DecayV, _p.DecayG, _p.GToV);
-        _refractorySteps = s.PoissonThreshold > 0 ? 0 : _p.RefractorySteps;
+        SetStimulus(s.PoissonThreshold);
         _v = _p.VRest;
         _pending = new int[2 * _p.DelaySteps];
 
         Receive<RunEpoch>(RunEpoch);
         Receive<SpikeTrain>(OnSpikes);
         Receive<SpikeAck>(OnAck);
+        Receive<SetStimulus>(m => SetStimulus(m.PoissonThreshold));
+    }
+
+    void SetStimulus(ulong threshold)
+    {
+        _poissonThreshold = threshold;
+        _refractorySteps = threshold > 0 ? 0 : _p.RefractorySteps;
     }
 
     void RunEpoch(RunEpoch e)
@@ -98,7 +106,7 @@ public sealed class NeuronActor : ReceiveActor
             _pending[slot] = 0;
         }
 
-        if (notRefractory && _s.PoissonThreshold > 0 && Rng.Draw(_s.Seed, _s.Trial, _flywireId, t) < _s.PoissonThreshold)
+        if (notRefractory && _poissonThreshold > 0 && Rng.Draw(_s.Seed, _s.Trial, _flywireId, t) < _poissonThreshold)
             _v += _p.PoissonKick;
 
         if (spiked)
@@ -125,7 +133,7 @@ public sealed class NeuronActor : ReceiveActor
 
     void ReportDone()
     {
-        bool active = _s.PoissonThreshold > 0 || _v != _p.VRest || _g != 0 || Array.Exists(_pending, x => x != 0);
+        bool active = _poissonThreshold > 0 || _v != _p.VRest || _g != 0 || Array.Exists(_pending, x => x != 0);
         _idle = !active;
         _clock.Tell(new EpochDone(_s.Index, _spikes, active, [.. _woken]));
         _woken.Clear();

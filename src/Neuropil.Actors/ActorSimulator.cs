@@ -9,6 +9,9 @@ public sealed class ActorSimulator : IAsyncDisposable
     readonly ActorSystem _system;
     readonly IActorRef _clock;
 
+    public ActorSystem System => _system;
+    public IActorRef Clock => _clock;
+
     public ActorSimulator(
         Brain brain,
         IEnumerable<int> stimulated,
@@ -32,6 +35,8 @@ public sealed class ActorSimulator : IAsyncDisposable
         var result = await _clock.Ask<RunResult>(new Run(steps), TimeSpan.FromHours(1));
         return result.Spikes;
     }
+
+    public void Stimulate(IEnumerable<int> neurons, double rateHz) => _clock.Tell(new Stimulate([.. neurons], rateHz));
 
     public async ValueTask DisposeAsync() => await _system.Terminate();
 }

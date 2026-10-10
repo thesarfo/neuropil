@@ -21,11 +21,15 @@ public sealed class ClockActor : ReceiveActor
     long _step, _endStep;
     int _outstanding;
     IActorRef _caller = ActorRefs.Nobody;
+    IActorRef? _subscriber;
+    readonly LifParams _p;
     readonly List<(long Step, int Neuron)> _spikes = [];
+    readonly List<(long Step, int Neuron)> _epochSpikes = [];
 
     public ClockActor(Setup s)
     {
         int n = s.Brain.NeuronCount;
+        _p = s.P;
         _epochSteps = s.P.DelaySteps;
         _neurons = new IActorRef[n];
         _active = new bool[n];
@@ -50,6 +54,19 @@ public sealed class ClockActor : ReceiveActor
             StartEpoch();
         });
         Receive<EpochDone>(OnDone);
+        Receive<Subscribe>(m => _subscriber = m.Subscriber);
+        Receive<Stimulate>(OnStimulate);
+    }
+
+    void OnStimulate(Stimulate m)
+    {
+        var stimulus = new SetStimulus(m.RateHz > 0 ? _p.PoissonThreshold(m.RateHz) : 0);
+        var wake = _outstanding > 0 ? _nextActive : _active;
+        foreach (int i in m.Neurons)
+        {
+            _neurons[i].Tell(stimulus);
+            wake[i] = true;
+        }
     }
 
     void StartEpoch()
@@ -66,20 +83,25 @@ public sealed class ClockActor : ReceiveActor
             }
             if (_outstanding > 0) return;
             _step = epoch.ToStep;
+            _subscriber?.Tell(new EpochSpikes(epoch.FromStep, epoch.ToStep, []));
         }
 
-        _spikes.Sort();
         _caller.Tell(new RunResult([.. _spikes]));
     }
 
     void OnDone(EpochDone d)
     {
-        foreach (long t in d.Spikes) _spikes.Add((t, d.Neuron));
+        foreach (long t in d.Spikes) _epochSpikes.Add((t, d.Neuron));
         if (d.Active) _nextActive[d.Neuron] = true;
         foreach (int w in d.Woken) _nextActive[w] = true;
         if (--_outstanding > 0) return;
 
+        long from = _step;
         _step = Math.Min(_step + _epochSteps, _endStep);
+        _epochSpikes.Sort();
+        _spikes.AddRange(_epochSpikes);
+        _subscriber?.Tell(new EpochSpikes(from, _step, [.. _epochSpikes]));
+        _epochSpikes.Clear();
         Array.Copy(_nextActive, _active, _active.Length);
         Array.Clear(_nextActive);
         StartEpoch();

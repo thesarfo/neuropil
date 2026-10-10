@@ -1,3 +1,4 @@
+using Akka.Actor;
 using Neuropil.Actors;
 using Neuropil.Core;
 
@@ -5,7 +6,7 @@ namespace Neuropil.Core.Tests;
 
 public class ActorSimulatorTests
 {
-    static Brain RandomBrain(int neurons, int edgesPerNeuron, int seed)
+    internal static Brain RandomBrain(int neurons, int edgesPerNeuron, int seed)
     {
         var rng = new Random(seed);
         var edges = new HashSet<(int, int)>();
@@ -68,5 +69,62 @@ public class ActorSimulatorTests
             parts.AddRange(await pieces.RunAsync(n));
 
         Assert.Equal(whole, parts);
+    }
+
+    [Fact]
+    public async Task Stimulation_changed_mid_run_matches_array_mode()
+    {
+        var brain = RandomBrain(200, 12, 4);
+        int[] first = [0, 1, 2, 3, 4, 5], second = [6, 7, 8, 9];
+        (long Steps, Action<Action<int[], double>> Change)[] script =
+        [
+            (0, set => set(first, 150)),
+            (500, set => set(second, 300)),
+            (700, set => set(first, 0)),
+            (800, _ => { }),
+        ];
+
+        var array = new ArraySimulator(brain, seed: 11);
+        var expected = new List<(long, int)>();
+        await using var actors = new ActorSimulator(brain, [], seed: 11);
+        var actual = new List<(long, int)>();
+
+        foreach (var (steps, change) in script)
+        {
+            for (long s = 0; s < steps; s++)
+            {
+                long at = array.Step;
+                foreach (int i in array.Advance()) expected.Add((at, i));
+            }
+            actual.AddRange(await actors.RunAsync(steps));
+            change((neurons, rate) => { array.Stimulate(neurons, rate); actors.Stimulate(neurons, rate); });
+        }
+
+        Assert.True(expected.Count > 500, $"only {expected.Count} spikes");
+        Assert.Contains(expected, s => s.Item1 > 1300 && s.Item2 >= 6);
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public async Task Subscriber_receives_every_spike_epoch_by_epoch()
+    {
+        var brain = RandomBrain(100, 10, 9);
+        await using var actors = new ActorSimulator(brain, [0, 1, 2, 3, 4], seed: 5);
+        var inbox = Akka.Actor.Inbox.Create(actors.System);
+        actors.Clock.Tell(new Subscribe(inbox.Receiver));
+
+        var whole = await actors.RunAsync(100);
+
+        var streamed = new List<(long, int)>();
+        long covered = 0;
+        while (covered < 100)
+        {
+            var epoch = (EpochSpikes)await inbox.ReceiveAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(covered, epoch.FromStep);
+            covered = epoch.ToStep;
+            streamed.AddRange(epoch.Spikes);
+        }
+        Assert.NotEmpty(whole);
+        Assert.Equal(whole, streamed);
     }
 }

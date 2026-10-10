@@ -19,7 +19,8 @@ public sealed class ArraySimulator
     // Summed as integer synapse counts so arrival order can't change the result.
     readonly int[][] _pending;
 
-    readonly List<(int Neuron, ulong Threshold)> _poisson = [];
+    readonly ulong[] _poissonThreshold;
+    readonly SortedSet<int> _stimulated = [];
     readonly List<int> _spiked = [];
 
     public long Step { get; private set; }
@@ -40,6 +41,7 @@ public sealed class ArraySimulator
         _notRefractory = new bool[n];
         _refractorySteps = new int[n];
         _silenced = new bool[n];
+        _poissonThreshold = new ulong[n];
         _pending = new int[_p.DelaySteps + 1][];
         for (int i = 0; i < _pending.Length; i++) _pending[i] = new int[n];
         Array.Fill(_refractorySteps, _p.RefractorySteps);
@@ -48,13 +50,15 @@ public sealed class ArraySimulator
 
     public ReadOnlySpan<double> Voltage => _v;
 
+    // Like the reference, stimulated neurons have no refractory period. A rate of zero switches it off.
     public void Stimulate(IEnumerable<int> neurons, double? rateHz = null)
     {
-        ulong threshold = _p.PoissonThreshold(rateHz);
+        ulong threshold = rateHz is <= 0 ? 0 : _p.PoissonThreshold(rateHz);
         foreach (int i in neurons)
         {
-            _poisson.Add((i, threshold));
-            _refractorySteps[i] = 0;
+            _poissonThreshold[i] = threshold;
+            _refractorySteps[i] = threshold > 0 ? 0 : _p.RefractorySteps;
+            if (threshold > 0) _stimulated.Add(i); else _stimulated.Remove(i);
         }
     }
 
@@ -122,8 +126,8 @@ public sealed class ArraySimulator
             inbox[i] = 0;
         }
 
-        foreach (var (i, threshold) in _poisson)
-            if (_notRefractory[i] && Rng.Draw(_seed, Trial, _brain.FlywireIds[i], t) < threshold) _v[i] += _p.PoissonKick;
+        foreach (int i in _stimulated)
+            if (_notRefractory[i] && Rng.Draw(_seed, Trial, _brain.FlywireIds[i], t) < _poissonThreshold[i]) _v[i] += _p.PoissonKick;
 
         foreach (int i in _spiked)
         {
