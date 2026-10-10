@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Neuropil</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <header class="bar">
+      <h1>Neuropil</h1>
+      <label class="circuit-pick">
+        <span class="visually-hidden">Circuit</span>
+        <select id="circuit" disabled></select>
+      </label>
+      <p id="status" class="status" role="status">Connecting…</p>
+    </header>
+
+    <main class="layout">
+      <section class="controls card" aria-label="Experiment">
+        <div class="row">
+          <button id="stimulate" class="primary" aria-pressed="false" disabled>Give it sugar</button>
+          <label class="rate">
+            <span>Rate</span>
+            <input id="rate" type="range" min="10" max="300" step="10" value="150" disabled />
+            <output id="rate-out" for="rate">150 Hz</output>
+          </label>
+        </div>
+        <div class="row transport">
+          <button id="play" disabled>Play</button>
+          <button id="step" disabled title="Advance 1 ms of simulated time">Step 1 ms</button>
+          <button id="reset" disabled>Reset</button>
+          <label class="speed">
+            <span class="visually-hidden">Speed</span>
+            <select id="speed" disabled>
+              <option value="0.01">100× slower</option>
+              <option value="0.05" selected>20× slower</option>
+              <option value="0.2">5× slower</option>
+              <option value="1">Real time</option>
+              <option value="max">As fast as possible</option>
+            </select>
+          </label>
+        </div>
+        <dl class="clock">
+          <div><dt>Simulated time</dt><dd id="clock">0.0 ms</dd></div>
+          <div><dt>Neurons firing</dt><dd id="active">0</dd></div>
+        </dl>
+        <div id="outputs" class="outputs"></div>
+      </section>
+
+      <section class="stage card" aria-label="Circuit">
+        <canvas id="circuit-view" role="img" aria-label="Circuit diagram. Neurons are arranged in columns from sensory neurons on the left; each lights up when it fires. Use the most active list to pick a neuron without a pointer."></canvas>
+        <p id="empty" class="empty" hidden></p>
+        <ul class="legend" aria-label="Legend">
+          <li><i class="dot sensory"></i>sensory</li>
+          <li><i class="dot excitatory"></i>excitatory</li>
+          <li><i class="dot inhibitory"></i>inhibitory</li>
+          <li><i class="dot output"></i>motor output</li>
+        </ul>
+      </section>
+
+      <section class="raster card" aria-label="Spike raster">
+        <h2>Spikes, last 200 ms</h2>
+        <canvas id="raster-view" role="img" aria-label="Spike raster: one row per neuron from sensory at the top, one mark per spike."></canvas>
+      </section>
+
+      <section class="inspector card" aria-label="Neuron inspector">
+        <h2>Neuron</h2>
+        <div id="inspector-body">
+          <p class="hint">Click a neuron, or pick one of the most active.</p>
+          <canvas id="trace-view" role="img" aria-label="Voltage of the selected neuron over the last 100 ms." hidden></canvas>
+        </div>
+        <h3>Most active</h3>
+        <ol id="top" class="neuron-list"></ol>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
