@@ -23,7 +23,7 @@ def read_preset(name: str) -> list[int]:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("experiment", choices=[f.stem for f in PRESETS.glob("*.txt")])
+    p.add_argument("experiment", choices=[f.stem for f in PRESETS.glob("*.txt") if "." not in f.stem])
     p.add_argument("--n-proc", type=int, default=8)
     p.add_argument("--out", type=Path, default=ROOT / "data" / "reference")
     a = p.parse_args()

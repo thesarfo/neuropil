@@ -1,8 +1,16 @@
+using System.Text.Json;
 using Neuropil.Core;
 
 namespace Neuropil.Server;
 
-public sealed record Circuit(string Name, Brain Brain, IReadOnlyList<int> Sensory, IReadOnlyDictionary<int, string>? Labels = null);
+public sealed record CircuitInfo(string Title, string Start, string Stop, string About);
+
+public sealed record Circuit(
+    string Name,
+    Brain Brain,
+    IReadOnlyList<int> Sensory,
+    IReadOnlyDictionary<int, string>? Labels = null,
+    CircuitInfo? Info = null);
 
 /// <summary>Circuits cut in advance with `neuropil circuit`; the preset of the same name marks the sensory neurons.</summary>
 public sealed class CircuitLibrary
@@ -22,6 +30,11 @@ public sealed class CircuitLibrary
     {
         var circuits = new List<Circuit>();
         if (!Directory.Exists(circuitsDir)) return new CircuitLibrary(circuits);
+
+        string infoPath = Path.Combine(presetsDir, "circuits.json");
+        var info = File.Exists(infoPath)
+            ? JsonSerializer.Deserialize<Dictionary<string, CircuitInfo>>(File.ReadAllText(infoPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))!
+            : [];
 
         foreach (string path in Directory.EnumerateFiles(circuitsDir, "*.bin").Order())
         {
@@ -47,7 +60,7 @@ public sealed class CircuitLibrary
                         labels[index] = parts[1];
                 }
             }
-            circuits.Add(new Circuit(name, brain, sensory, labels));
+            circuits.Add(new Circuit(name, brain, sensory, labels, info.GetValueOrDefault(name)));
         }
         return new CircuitLibrary(circuits);
     }

@@ -1,0 +1,20 @@
+{
+  "sugarR": {
+    "title": "Sugar → feeding",
+    "start": "Give it sugar",
+    "stop": "Take sugar away",
+    "about": "Sugar-sensing taste neurons drive MN9, the motor neuron that extends the proboscis."
+  },
+  "waterR": {
+    "title": "Water → feeding",
+    "start": "Give it water",
+    "stop": "Take water away",
+    "about": "Water-sensing taste neurons reach the same proboscis motor neuron by a different route."
+  },
+  "antenna": {
+    "title": "Antenna touch → grooming",
+    "start": "Touch the antenna",
+    "stop": "Stop touching",
+    "about": "Touch sensors in the antenna drive aDN1, aDN2 and aBN1, which make the fly groom its antennae."
+  }
+}

@@ -30,7 +30,7 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
             await SendAsync(new
             {
                 type = "hello",
-                circuits = library.All.Select(c => new { name = c.Name, neurons = c.Brain.NeuronCount, edges = c.Brain.EdgeCount }),
+                circuits = library.All.Select(c => new { name = c.Name, title = c.Info?.Title ?? c.Name, neurons = c.Brain.NeuronCount, edges = c.Brain.EdgeCount }),
             }, linked.Token);
             await ReceiveAsync(linked.Token);
         }
@@ -103,6 +103,7 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
         {
             type = "circuit",
             name = circuit.Name,
+            info = circuit.Info ?? new CircuitInfo(circuit.Name, "Stimulate", "Stop stimulating", ""),
             dtMs = LifParams.Default.Dt,
             neurons = brain.FlywireIds.Select((id, i) => new { id = id.ToString(), sensory = sensory.Contains(i), label = circuit.Labels?.GetValueOrDefault(i) }),
             edges,

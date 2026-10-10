@@ -1,0 +1,4 @@
+# Antennal grooming neurons (Shiu et al. 2024, Figure 5): "<flywire id> <label>" per line.
+720575940616185531 aDN1
+720575940629806974 aDN2
+720575940630907434 aBN1
