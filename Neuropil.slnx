@@ -3,6 +3,7 @@
     <Project Path="src/Neuropil.Actors/Neuropil.Actors.csproj" />
     <Project Path="src/Neuropil.Cli/Neuropil.Cli.csproj" />
     <Project Path="src/Neuropil.Core/Neuropil.Core.csproj" />
+    <Project Path="src/Neuropil.Server/Neuropil.Server.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Neuropil.Core.Tests/Neuropil.Core.Tests.csproj" />

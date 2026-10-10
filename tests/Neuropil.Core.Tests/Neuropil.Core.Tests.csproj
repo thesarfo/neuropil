@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Neuropil.Core\Neuropil.Core.csproj" />
     <ProjectReference Include="..\..\src\Neuropil.Actors\Neuropil.Actors.csproj" />
+    <ProjectReference Include="..\..\src\Neuropil.Server\Neuropil.Server.csproj" />
   </ItemGroup>
 
 </Project>
