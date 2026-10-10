@@ -14,6 +14,7 @@ public sealed record LoadCircuit(string Name);
 ///   {"type":"play"} {"type":"pause"} {"type":"reset"}
 ///   {"type":"step","steps":1}
 ///   {"type":"speed","value":0.05}                        or "max"
+///   {"type":"watch","neuron":33}                         or null to stop; streams that neuron's voltage
 /// </summary>
 public static class ClientMessage
 {
@@ -72,6 +73,15 @@ public static class ClientMessage
                     if (v.ValueKind != JsonValueKind.Number || !v.TryGetDouble(out double ratio) || !(ratio >= MinSpeed && ratio <= MaxSpeed))
                         return Fail($"speed must be \"max\" or a number from {MinSpeed} to {MaxSpeed}");
                     return (new SetSpeed(ratio), null);
+                }
+
+                case "watch":
+                {
+                    if (!root.TryGetProperty("neuron", out var w)) return Fail("watch needs a \"neuron\" index or null");
+                    if (w.ValueKind == JsonValueKind.Null) return (new Watch(null), null);
+                    if (!w.TryGetInt32(out int watched) || watched < 0 || watched >= circuit.Brain.NeuronCount)
+                        return Fail($"neuron must be null or an index from 0 to {circuit.Brain.NeuronCount - 1}");
+                    return (new Watch(watched), null);
                 }
 
                 case "stimulate":

@@ -1,0 +1,2 @@
+# Neurons worth naming in the sugar circuit: "<flywire id> <label>" per line.
+720575940660219265 MN9

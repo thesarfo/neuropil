@@ -39,6 +39,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
     long _step;
     bool _running, _busy, _resetPending;
     double? _speed = 0.05;
+    int? _watched;
     long _pendingSteps;
 
     // Pacing reference: simulated step _anchorStep was due at wall time _anchorMs.
@@ -64,6 +65,12 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
             foreach (int i in m.Neurons) _stimulus[i] = m.RateHz;
             _clock.Tell(m);
         });
+        Receive<Watch>(m =>
+        {
+            _watched = m.Neuron;
+            _clock.Tell(m);
+            _bridge.Tell(m);
+        });
         Receive<Continue>(_ => Advance());
         Receive<RunResult>(_ =>
         {
@@ -80,6 +87,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
         _clock.Tell(new Subscribe(_bridge));
         foreach (var group in _stimulus.GroupBy(kv => kv.Value, kv => kv.Key))
             _clock.Tell(new Stimulate([.. group], group.Key));
+        if (_watched is not null) _clock.Tell(new Watch(_watched));
     }
 
     void DoReset()

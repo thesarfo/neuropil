@@ -104,7 +104,7 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
             type = "circuit",
             name = circuit.Name,
             dtMs = LifParams.Default.Dt,
-            neurons = brain.FlywireIds.Select((id, i) => new { id = id.ToString(), sensory = sensory.Contains(i) }),
+            neurons = brain.FlywireIds.Select((id, i) => new { id = id.ToString(), sensory = sensory.Contains(i), label = circuit.Labels?.GetValueOrDefault(i) }),
             edges,
         }, stop);
 
@@ -128,6 +128,12 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
                     spikes = f.Spikes.Select(s => new[] { s.Step, s.Neuron }),
                     rates = f.Rates.Select(r => new[] { r.Neuron, r.Hz }),
                     truncated = f.Truncated,
+                    trace = f.Trace is null ? null : new
+                    {
+                        neuron = f.Trace.Neuron,
+                        fromStep = f.Trace.FromStep,
+                        mv = f.Trace.Millivolts.Select(v => Math.Round(v, 2)),
+                    },
                 }, stop);
             }
         }

@@ -127,4 +127,36 @@ public class ActorSimulatorTests
         Assert.NotEmpty(whole);
         Assert.Equal(whole, streamed);
     }
+
+    [Fact]
+    public async Task Watched_neuron_reports_the_same_voltage_as_array_mode()
+    {
+        var brain = RandomBrain(100, 10, 9);
+        int[] stimulated = [0, 1, 2, 3, 4];
+        const int watched = 40;
+        await using var actors = new ActorSimulator(brain, stimulated, seed: 5);
+        var inbox = Inbox.Create(actors.System);
+        actors.Clock.Tell(new Subscribe(inbox.Receiver));
+        actors.Clock.Tell(new Watch(watched));
+        await actors.RunAsync(400);
+
+        var array = new ArraySimulator(brain, seed: 5);
+        array.Stimulate(stimulated);
+        var expected = new List<double>();
+        for (int s = 0; s < 400; s++)
+        {
+            array.Advance();
+            expected.Add(array.Voltage[watched]);
+        }
+
+        var actual = new List<double>();
+        while (actual.Count < 400)
+        {
+            var epoch = (EpochSpikes)await inbox.ReceiveAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(watched, epoch.Watched);
+            actual.AddRange(epoch.Voltages!);
+        }
+        Assert.Contains(expected, v => v != LifParams.Default.VRest);
+        Assert.Equal(expected, actual);
+    }
 }

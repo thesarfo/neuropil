@@ -2,7 +2,7 @@ using Neuropil.Core;
 
 namespace Neuropil.Server;
 
-public sealed record Circuit(string Name, Brain Brain, IReadOnlyList<int> Sensory);
+public sealed record Circuit(string Name, Brain Brain, IReadOnlyList<int> Sensory, IReadOnlyDictionary<int, string>? Labels = null);
 
 /// <summary>Circuits cut in advance with `neuropil circuit`; the preset of the same name marks the sensory neurons.</summary>
 public sealed class CircuitLibrary
@@ -35,7 +35,19 @@ public sealed class CircuitLibrary
                     .Where(i => i >= 0)
                     .ToList()
                 : [];
-            circuits.Add(new Circuit(name, brain, sensory));
+
+            var labels = new Dictionary<int, string>();
+            string outputs = Path.Combine(presetsDir, name + ".outputs.txt");
+            if (File.Exists(outputs))
+            {
+                foreach (string line in File.ReadLines(outputs))
+                {
+                    var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    if (parts.Length == 2 && long.TryParse(parts[0], out long id) && brain.IndexOf(id) is >= 0 and int index)
+                        labels[index] = parts[1];
+                }
+            }
+            circuits.Add(new Circuit(name, brain, sensory, labels));
         }
         return new CircuitLibrary(circuits);
     }

@@ -28,7 +28,8 @@ public sealed class NeuronActor : ReceiveActor
     // Indexed by arrival step mod two epochs; arrivals always fall in the current or next one.
     readonly int[] _pending;
 
-    bool _idle;
+    bool _idle, _watched;
+    double[]? _voltages;
     int _awaitingAcks;
     long[] _spikes = [];
     readonly List<int> _woken = [];
@@ -48,6 +49,7 @@ public sealed class NeuronActor : ReceiveActor
         Receive<SpikeTrain>(OnSpikes);
         Receive<SpikeAck>(OnAck);
         Receive<SetStimulus>(m => SetStimulus(m.PoissonThreshold));
+        Receive<SetWatched>(m => _watched = m.Watched);
     }
 
     void SetStimulus(ulong threshold)
@@ -60,8 +62,12 @@ public sealed class NeuronActor : ReceiveActor
     {
         _clock = Sender;
         var spikes = new List<long>();
+        _voltages = _watched ? new double[e.ToStep - e.FromStep] : null;
         for (long t = e.FromStep; t < e.ToStep; t++)
+        {
             if (Advance(t)) spikes.Add(t);
+            if (_voltages is not null) _voltages[t - e.FromStep] = _v;
+        }
         _spikes = [.. spikes];
 
         var targets = _s.Brain.TargetsOf(_s.Index);
@@ -133,9 +139,9 @@ public sealed class NeuronActor : ReceiveActor
 
     void ReportDone()
     {
-        bool active = _poissonThreshold > 0 || _v != _p.VRest || _g != 0 || Array.Exists(_pending, x => x != 0);
+        bool active = _watched || _poissonThreshold > 0 || _v != _p.VRest || _g != 0 || Array.Exists(_pending, x => x != 0);
         _idle = !active;
-        _clock.Tell(new EpochDone(_s.Index, _spikes, active, [.. _woken]));
+        _clock.Tell(new EpochDone(_s.Index, _spikes, active, [.. _woken], _voltages));
         _woken.Clear();
     }
 }

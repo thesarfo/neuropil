@@ -12,7 +12,7 @@ public sealed record SpikeTrain(short Weight, long[] Steps);
 public sealed record SpikeAck(int Neuron, bool Woke);
 
 // Sent only once every SpikeTrain is acknowledged, so a complete set means all spikes are delivered.
-public sealed record EpochDone(int Neuron, long[] Spikes, bool Active, int[] Woken);
+public sealed record EpochDone(int Neuron, long[] Spikes, bool Active, int[] Woken, double[]? Voltages = null);
 
 public sealed record Run(long Steps);
 
@@ -23,6 +23,16 @@ public sealed record SetStimulus(ulong PoissonThreshold);
 
 public sealed record Subscribe(IActorRef Subscriber);
 
-public sealed record EpochSpikes(long FromStep, long ToStep, IReadOnlyList<(long Step, int Neuron)> Spikes);
+public sealed record EpochSpikes(
+    long FromStep,
+    long ToStep,
+    IReadOnlyList<(long Step, int Neuron)> Spikes,
+    int? Watched = null,
+    double[]? Voltages = null);
+
+// Record one neuron's voltage at every step, or none.
+public sealed record Watch(int? Neuron);
+
+public sealed record SetWatched(bool Watched);
 
 public sealed record RunResult(IReadOnlyList<(long Step, int Neuron)> Spikes);

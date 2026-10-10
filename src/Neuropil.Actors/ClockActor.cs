@@ -22,6 +22,8 @@ public sealed class ClockActor : ReceiveActor
     int _outstanding;
     IActorRef _caller = ActorRefs.Nobody;
     IActorRef? _subscriber;
+    int? _watched;
+    double[]? _voltages;
     readonly LifParams _p;
     readonly List<(long Step, int Neuron)> _spikes = [];
     readonly List<(long Step, int Neuron)> _epochSpikes = [];
@@ -56,6 +58,16 @@ public sealed class ClockActor : ReceiveActor
         Receive<EpochDone>(OnDone);
         Receive<Subscribe>(m => _subscriber = m.Subscriber);
         Receive<Stimulate>(OnStimulate);
+        Receive<Watch>(OnWatch);
+    }
+
+    void OnWatch(Watch m)
+    {
+        if (_watched is { } old) _neurons[old].Tell(new SetWatched(false));
+        _watched = m.Neuron;
+        if (m.Neuron is not { } i) return;
+        _neurons[i].Tell(new SetWatched(true));
+        (_outstanding > 0 ? _nextActive : _active)[i] = true;
     }
 
     void OnStimulate(Stimulate m)
@@ -92,6 +104,7 @@ public sealed class ClockActor : ReceiveActor
     void OnDone(EpochDone d)
     {
         foreach (long t in d.Spikes) _epochSpikes.Add((t, d.Neuron));
+        if (d.Voltages is not null && d.Neuron == _watched) _voltages = d.Voltages;
         if (d.Active) _nextActive[d.Neuron] = true;
         foreach (int w in d.Woken) _nextActive[w] = true;
         if (--_outstanding > 0) return;
@@ -100,7 +113,8 @@ public sealed class ClockActor : ReceiveActor
         _step = Math.Min(_step + _epochSteps, _endStep);
         _epochSpikes.Sort();
         _spikes.AddRange(_epochSpikes);
-        _subscriber?.Tell(new EpochSpikes(from, _step, [.. _epochSpikes]));
+        _subscriber?.Tell(new EpochSpikes(from, _step, [.. _epochSpikes], _voltages is null ? null : _watched, _voltages));
+        _voltages = null;
         _epochSpikes.Clear();
         Array.Copy(_nextActive, _active, _active.Length);
         Array.Clear(_nextActive);

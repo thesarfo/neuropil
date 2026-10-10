@@ -60,8 +60,17 @@ public class ClientMessageTests
         Assert.Equal(new StepOnce(18), Parse("""{"type":"step","steps":18}""", Loaded).Command);
     }
 
+    [Fact]
+    public void Watch_takes_a_neuron_or_null()
+    {
+        Assert.Equal(new Watch(7), Parse("""{"type":"watch","neuron":7}""", Loaded).Command);
+        Assert.Equal(new Watch(null), Parse("""{"type":"watch","neuron":null}""", Loaded).Command);
+    }
+
     [Theory]
     [InlineData("not json")]
+    [InlineData("""{"type":"watch"}""")]
+    [InlineData("""{"type":"watch","neuron":10}""")]
     [InlineData("[1,2]")]
     [InlineData("""{"circuit":"x"}""")]
     [InlineData("""{"type":"launch"}""")]

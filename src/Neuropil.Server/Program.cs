@@ -24,6 +24,8 @@ var app = builder.Build();
 var sockets = new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) };
 foreach (string origin in origins) sockets.AllowedOrigins.Add(origin);
 app.UseWebSockets(sockets);
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.Lifetime.ApplicationStopping.Register(() => app.Services.GetRequiredService<ActorSystem>().Terminate().Wait(TimeSpan.FromSeconds(5)));
 
