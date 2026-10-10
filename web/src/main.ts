@@ -22,6 +22,12 @@ const ui = {
   active: $("active"),
   outputs: $("outputs"),
   empty: $("empty"),
+  about: $("about"),
+  pin: $<HTMLButtonElement>("pin"),
+  unpin: $<HTMLButtonElement>("unpin"),
+  window: $("window"),
+  compare: $<HTMLTableElement>("compare"),
+  pinnedName: $("pinned-name"),
   inspector: $("inspector-body"),
   trace: $<HTMLCanvasElement>("trace-view"),
   top: $("top"),
@@ -35,6 +41,12 @@ let step = 0;
 let selected: number | null = null;
 let rates = new Map<number, number>();
 let lastListUpdate = 0;
+
+// Spike counts since the stimulus last changed, for average rates steadier than the 100 ms window.
+let counts = new Float64Array(0);
+let countFromStep = 0;
+let countsIncomplete = false;
+let pinned: { name: string; rates: Float64Array } | null = null;
 
 const circuitView = new CircuitView($<HTMLCanvasElement>("circuit-view"), palette, select);
 const rasterView = new RasterView($<HTMLCanvasElement>("raster-view"), palette);
@@ -54,7 +66,7 @@ function onConnectionState(state: ConnectionState): void {
 function onMessage(message: ServerMessage): void {
   switch (message.type) {
     case "hello":
-      ui.circuit.replaceChildren(...message.circuits.map((c) => new Option(`${c.name} (${c.neurons} neurons)`, c.name)));
+      ui.circuit.replaceChildren(...message.circuits.map((c) => new Option(`${c.title} (${c.neurons} neurons)`, c.name)));
       if (message.circuits.length === 0) {
         showEmpty("No circuits found.\nBuild one with `neuropil circuit` and put it in data/circuits/.");
         ui.status.textContent = "Connected";
@@ -70,6 +82,11 @@ function onMessage(message: ServerMessage): void {
       stimulating = false;
       rates = new Map();
       step = 0;
+      counts = new Float64Array(model.count);
+      pinned = null;
+      restartAverage();
+      ui.about.textContent = model.info.about;
+      renderCompare();
       circuitView.setModel(model);
       rasterView.setModel(model);
       traceView.clear(model.dtMs);
@@ -98,11 +115,15 @@ function onFrame(frame: FrameMessage): void {
     circuitView.clear();
     rasterView.clear();
     traceView.clear();
+    step = frame.step;
+    restartAverage();
   }
   step = frame.step;
+  if (frame.truncated) countsIncomplete = true;
   running = frame.running;
   for (const [at, neuron] of frame.spikes) {
     circuitView.spike(neuron);
+    counts[neuron]++;
     rasterView.add(at, neuron);
   }
   rates = new Map(frame.rates);
@@ -119,11 +140,12 @@ function onFrame(frame: FrameMessage): void {
     lastListUpdate = now;
     renderTop();
     renderSelectedRate();
+    renderCompare();
   }
 }
 
 function setEnabled(enabled: boolean): void {
-  for (const control of [ui.circuit, ui.stimulate, ui.rate, ui.play, ui.step, ui.reset, ui.speed]) control.disabled = !enabled;
+  for (const control of [ui.circuit, ui.stimulate, ui.rate, ui.play, ui.step, ui.reset, ui.speed, ui.pin]) control.disabled = !enabled;
 }
 
 function showEmpty(text: string): void {
@@ -137,7 +159,59 @@ function speedValue(): number | "max" {
 
 function renderStimulate(): void {
   ui.stimulate.setAttribute("aria-pressed", String(stimulating));
-  ui.stimulate.textContent = stimulating ? "Take sugar away" : "Give it sugar";
+  ui.stimulate.textContent = stimulating ? (model?.info.stop ?? "Stop") : (model?.info.start ?? "Stimulate");
+}
+
+function restartAverage(): void {
+  counts.fill(0);
+  countFromStep = step;
+  countsIncomplete = false;
+}
+
+function averagedMs(): number {
+  return (step - countFromStep) * (model?.dtMs ?? 0.1);
+}
+
+function averageRates(): Float64Array {
+  const seconds = averagedMs() / 1000;
+  return seconds > 0 ? counts.map((c) => c / seconds) : new Float64Array(counts.length);
+}
+
+function renderCompare(): void {
+  if (!model) return;
+  const ms = averagedMs();
+  ui.window.textContent = ms > 0 ? `Averaging ${ms.toFixed(0)} ms${countsIncomplete ? " (some spikes skipped at this speed)" : ""}` : "";
+  ui.unpin.hidden = pinned === null;
+  ui.compare.hidden = pinned === null;
+  if (!pinned) return;
+
+  ui.pinnedName.textContent = pinned.name;
+  const now = averageRates();
+  const labelled = model.labels.flatMap((label, neuron) => (label ? [neuron] : []));
+  const movers = [...now.keys()]
+    .filter((neuron) => !model!.labels[neuron])
+    .sort((a, b) => Math.abs(now[b] - pinned!.rates[b]) - Math.abs(now[a] - pinned!.rates[a]))
+    .slice(0, 4);
+
+  const rows = [...labelled, ...movers].map((neuron) => {
+    const row = document.createElement("tr");
+    const name = document.createElement("td");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = model!.nameOf(neuron);
+    button.addEventListener("click", () => select(neuron));
+    name.append(button);
+    const change = now[neuron] - pinned!.rates[neuron];
+    const cells = [pinned!.rates[neuron].toFixed(0), now[neuron].toFixed(0), `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(0)}`].map((text) => {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      return cell;
+    });
+    if (Math.abs(change) >= 1) cells[2].className = change > 0 ? "up" : "down";
+    row.append(name, ...cells);
+    return row;
+  });
+  ui.compare.tBodies[0].replaceChildren(...rows);
 }
 
 function neuronButton(neuron: number, amount: string): HTMLLIElement {
@@ -255,6 +329,7 @@ ui.circuit.addEventListener("change", () => connection.send({ type: "load", circ
 
 ui.stimulate.addEventListener("click", () => {
   stimulating = !stimulating;
+  restartAverage();
   connection.send({ type: "stimulate", rateHz: stimulating ? Number(ui.rate.value) : 0 });
   if (stimulating && !running) connection.send({ type: "play" });
   renderStimulate();
@@ -262,7 +337,19 @@ ui.stimulate.addEventListener("click", () => {
 
 ui.rate.addEventListener("input", () => {
   ui.rateOut.textContent = `${ui.rate.value} Hz`;
-  if (stimulating) connection.send({ type: "stimulate", rateHz: Number(ui.rate.value) });
+  if (!stimulating) return;
+  restartAverage();
+  connection.send({ type: "stimulate", rateHz: Number(ui.rate.value) });
+});
+
+ui.pin.addEventListener("click", () => {
+  pinned = { name: stimulating ? `${ui.rate.value} Hz` : "No stimulus", rates: averageRates() };
+  renderCompare();
+});
+
+ui.unpin.addEventListener("click", () => {
+  pinned = null;
+  renderCompare();
 });
 
 ui.play.addEventListener("click", () => connection.send({ type: running ? "pause" : "play" }));

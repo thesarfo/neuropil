@@ -1,10 +1,11 @@
-import type { CircuitMessage } from "./protocol";
+import type { CircuitInfo, CircuitMessage } from "./protocol";
 
 export type Edge = { other: number; weight: number };
 
 /** The circuit as the views need it: who connects to whom, and which layer each neuron sits in. */
 export class CircuitModel {
   readonly name: string;
+  readonly info: CircuitInfo;
   readonly dtMs: number;
   readonly count: number;
   readonly ids: string[];
@@ -22,6 +23,7 @@ export class CircuitModel {
 
   constructor(message: CircuitMessage) {
     this.name = message.name;
+    this.info = message.info;
     this.dtMs = message.dtMs;
     this.count = message.neurons.length;
     this.ids = message.neurons.map((n) => n.id);

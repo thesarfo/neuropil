@@ -84,16 +84,21 @@ ol, ul { list-style: none; }
   gap: var(--gap);
   padding: var(--gap) 16px 16px;
   grid-template-columns: minmax(0, 1fr) 330px;
-  grid-template-rows: auto minmax(150px, 1fr) 170px;
+  grid-template-rows: minmax(300px, 1fr) 170px;
   grid-template-areas:
-    "stage controls"
-    "stage inspector"
-    "raster inspector";
+    "stage side"
+    "raster side";
 }
-.controls { grid-area: controls; }
 .stage { grid-area: stage; }
 .raster { grid-area: raster; }
-.inspector { grid-area: inspector; overflow-y: auto; }
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  min-height: 0;
+  overflow-y: auto;
+}
 
 .card {
   background: var(--surface);
@@ -156,6 +161,17 @@ button.primary[aria-pressed="true"] {
 .output-card .meter i { display: block; height: 100%; width: 0; background: var(--output); }
 .output-card .value { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
 
+.small { font-size: 12px; }
+.compare table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+.compare th { text-align: right; font-weight: 500; color: var(--muted); padding: 2px 4px; }
+.compare th:first-child { text-align: left; }
+.compare td { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; padding: 1px 4px; border-top: 1px solid var(--rule); }
+.compare td:first-child { text-align: left; padding-left: 0; }
+.compare td button { border-color: transparent; padding: 0 4px; min-height: 24px; font-family: var(--mono); font-size: 12px; }
+.compare td button:hover { border-color: var(--rule); }
+.compare .up { color: var(--sensory); }
+.compare .down { color: var(--inhibitory); }
+
 .stage { position: relative; display: flex; flex-direction: column; padding: 0; min-height: 300px; }
 .stage canvas { flex: 1; width: 100%; min-height: 0; cursor: crosshair; }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); white-space: pre-line; }
@@ -199,7 +215,10 @@ button.primary[aria-pressed="true"] {
     grid-template-rows: auto;
     grid-template-areas: "controls" "stage" "raster" "inspector";
   }
+  /* The side column dissolves so its two cards can sit either side of the circuit. */
+  .side { display: contents; }
+  .controls { grid-area: controls; }
+  .inspector { grid-area: inspector; }
   .stage { height: 62vh; min-height: 340px; }
   .raster { height: 220px; }
-  .inspector { overflow: visible; }
 }

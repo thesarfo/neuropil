@@ -1,10 +1,13 @@
 // Messages exchanged with the server. Keep in step with ClientMessage.cs and Connection.cs.
 
-export type CircuitSummary = { name: string; neurons: number; edges: number };
+export type CircuitSummary = { name: string; title: string; neurons: number; edges: number };
+
+export type CircuitInfo = { title: string; start: string; stop: string; about: string };
 
 export type CircuitMessage = {
   type: "circuit";
   name: string;
+  info: CircuitInfo;
   dtMs: number;
   neurons: { id: string; sensory: boolean; label: string | null }[];
   edges: [pre: number, post: number, weight: number][];
