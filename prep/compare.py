@@ -14,6 +14,7 @@ def main() -> None:
     p.add_argument("reference", type=Path)
     p.add_argument("ours", type=Path)
     p.add_argument("--top", type=int, default=20)
+    p.add_argument("--stimulated", type=Path, help="preset of driven neurons, left out of the top-N ranking")
     a = p.parse_args()
 
     ref = pd.read_csv(a.reference, index_col="flywire_id")["rate_hz"]
@@ -21,8 +22,12 @@ def main() -> None:
     both = pd.concat({"reference": ref, "ours": ours}, axis=1).fillna(0)
 
     r = np.corrcoef(both["reference"], both["ours"])[0, 1]
-    top_ref = set(ref.nlargest(a.top).index)
-    top_ours = set(ours.nlargest(a.top).index)
+    # Driven neurons all fire near the stimulus rate, so their order is noise.
+    driven = set()
+    if a.stimulated:
+        driven = {int(l) for l in a.stimulated.read_text().splitlines() if l.strip() and not l.startswith("#")}
+    top_ref = set(ref[~ref.index.isin(driven)].nlargest(a.top).index)
+    top_ours = set(ours[~ours.index.isin(driven)].nlargest(a.top).index)
 
     print(f"active neurons    reference={len(ref)} ours={len(ours)} union={len(both)}")
     print(f"pearson r         {r:.4f}  (over the union of active neurons)")
