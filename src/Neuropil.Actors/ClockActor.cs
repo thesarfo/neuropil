@@ -5,6 +5,7 @@ namespace Neuropil.Actors;
 
 public sealed class ClockActor : ReceiveActor
 {
+    /// <param name="RegionOf">Region index per neuron for region mode; null runs one actor per neuron.</param>
     public sealed record Setup(
         Brain Brain,
         LifParams P,
@@ -12,9 +13,11 @@ public sealed class ClockActor : ReceiveActor
         int Trial,
         IReadOnlyList<int> Stimulated,
         double? RateHz,
-        IReadOnlyList<int> Silenced);
+        IReadOnlyList<int> Silenced,
+        int[]? RegionOf = null);
 
-    readonly IActorRef[] _neurons;
+    readonly IActorRef[] _units;
+    readonly int[] _unitOf;
     readonly int _epochSteps;
     readonly bool[] _active, _nextActive;
 
@@ -33,20 +36,42 @@ public sealed class ClockActor : ReceiveActor
         int n = s.Brain.NeuronCount;
         _p = s.P;
         _epochSteps = s.P.DelaySteps;
-        _neurons = new IActorRef[n];
-        _active = new bool[n];
-        _nextActive = new bool[n];
-        Array.Fill(_active, true);
-
+        ulong threshold = s.P.PoissonThreshold(s.RateHz);
         var stimulated = s.Stimulated.ToHashSet();
         var silenced = s.Silenced.ToHashSet();
-        ulong threshold = s.P.PoissonThreshold(s.RateHz);
-        for (int i = 0; i < n; i++)
+
+        if (s.RegionOf is { } regionOf)
         {
-            var setup = new NeuronActor.Setup(s.Brain, i, _neurons, s.P, s.Seed, s.Trial,
-                stimulated.Contains(i) ? threshold : 0, silenced.Contains(i));
-            _neurons[i] = Context.ActorOf(Props.Create(() => new NeuronActor(setup)), $"n{i}");
+            var members = Enumerable.Range(0, n).GroupBy(i => regionOf[i]).OrderBy(g => g.Key).Select(g => g.ToArray()).ToArray();
+            _unitOf = new int[n];
+            var localIndex = new int[n];
+            for (int r = 0; r < members.Length; r++)
+                for (int k = 0; k < members[r].Length; k++)
+                    (_unitOf[members[r][k]], localIndex[members[r][k]]) = (r, k);
+
+            _units = new IActorRef[members.Length];
+            for (int r = 0; r < members.Length; r++)
+            {
+                var setup = new RegionActor.Setup(s.Brain, r, members[r], _unitOf, localIndex, _units, s.P, s.Seed, s.Trial,
+                    stimulated, threshold, silenced);
+                _units[r] = Context.ActorOf(Props.Create(() => new RegionActor(setup)), $"r{r}");
+            }
         }
+        else
+        {
+            _unitOf = [.. Enumerable.Range(0, n)];
+            _units = new IActorRef[n];
+            for (int i = 0; i < n; i++)
+            {
+                var setup = new NeuronActor.Setup(s.Brain, i, _units, s.P, s.Seed, s.Trial,
+                    stimulated.Contains(i) ? threshold : 0, silenced.Contains(i));
+                _units[i] = Context.ActorOf(Props.Create(() => new NeuronActor(setup)), $"n{i}");
+            }
+        }
+
+        _active = new bool[_units.Length];
+        _nextActive = new bool[_units.Length];
+        Array.Fill(_active, true);
 
         Receive<Run>(r =>
         {
@@ -61,23 +86,24 @@ public sealed class ClockActor : ReceiveActor
         Receive<Watch>(OnWatch);
     }
 
+    void Wake(int neuron) => (_outstanding > 0 ? _nextActive : _active)[_unitOf[neuron]] = true;
+
     void OnWatch(Watch m)
     {
-        if (_watched is { } old) _neurons[old].Tell(new SetWatched(false));
+        if (_watched is { } old) _units[_unitOf[old]].Tell(new SetWatched(old, false));
         _watched = m.Neuron;
         if (m.Neuron is not { } i) return;
-        _neurons[i].Tell(new SetWatched(true));
-        (_outstanding > 0 ? _nextActive : _active)[i] = true;
+        _units[_unitOf[i]].Tell(new SetWatched(i, true));
+        Wake(i);
     }
 
     void OnStimulate(Stimulate m)
     {
-        var stimulus = new SetStimulus(m.RateHz > 0 ? _p.PoissonThreshold(m.RateHz) : 0);
-        var wake = _outstanding > 0 ? _nextActive : _active;
+        ulong threshold = m.RateHz > 0 ? _p.PoissonThreshold(m.RateHz) : 0;
         foreach (int i in m.Neurons)
         {
-            _neurons[i].Tell(stimulus);
-            wake[i] = true;
+            _units[_unitOf[i]].Tell(new SetStimulus(i, threshold));
+            Wake(i);
         }
     }
 
@@ -87,10 +113,10 @@ public sealed class ClockActor : ReceiveActor
         {
             var epoch = new RunEpoch(_step, Math.Min(_step + _epochSteps, _endStep));
             _outstanding = 0;
-            for (int i = 0; i < _neurons.Length; i++)
+            for (int u = 0; u < _units.Length; u++)
             {
-                if (!_active[i]) continue;
-                _neurons[i].Tell(epoch);
+                if (!_active[u]) continue;
+                _units[u].Tell(epoch);
                 _outstanding++;
             }
             if (_outstanding > 0) return;
@@ -103,9 +129,9 @@ public sealed class ClockActor : ReceiveActor
 
     void OnDone(EpochDone d)
     {
-        foreach (long t in d.Spikes) _epochSpikes.Add((t, d.Neuron));
-        if (d.Voltages is not null && d.Neuron == _watched) _voltages = d.Voltages;
-        if (d.Active) _nextActive[d.Neuron] = true;
+        _epochSpikes.AddRange(d.Spikes);
+        if (d.Voltages is not null) _voltages = d.Voltages;
+        if (d.Active) _nextActive[d.Unit] = true;
         foreach (int w in d.Woken) _nextActive[w] = true;
         if (--_outstanding > 0) return;
 

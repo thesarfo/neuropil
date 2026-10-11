@@ -19,14 +19,15 @@ public sealed class ActorSimulator : IAsyncDisposable
         ulong seed = 0,
         int trial = 0,
         double? rateHz = null,
-        IEnumerable<int>? silenced = null)
+        IEnumerable<int>? silenced = null,
+        int[]? regionOf = null)
     {
         _system = ActorSystem.Create("neuropil", ConfigurationFactory.ParseString("""
             akka.loglevel = WARNING
             akka.stdout-loglevel = WARNING
             """));
         var setup = new ClockActor.Setup(brain, p ?? LifParams.Default, seed, trial,
-            [.. stimulated], rateHz, [.. silenced ?? []]);
+            [.. stimulated], rateHz, [.. silenced ?? []], regionOf);
         _clock = _system.ActorOf(Props.Create(() => new ClockActor(setup)), "clock");
     }
 

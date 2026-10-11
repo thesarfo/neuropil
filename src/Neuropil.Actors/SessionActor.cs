@@ -21,7 +21,7 @@ public sealed record PlaybackChanged(bool Running, double? Speed);
 /// </summary>
 public sealed class SessionActor : ReceiveActor, IWithTimers
 {
-    public sealed record Setup(Brain Brain, LifParams P, ulong Seed, ChannelWriter<Frame> Frames);
+    public sealed record Setup(Brain Brain, LifParams P, ulong Seed, ChannelWriter<Frame> Frames, int[]? RegionOf = null);
 
     sealed record Continue;
 
@@ -82,7 +82,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
 
     void StartClock()
     {
-        var setup = new ClockActor.Setup(_s.Brain, _s.P, _s.Seed, 0, [], null, []);
+        var setup = new ClockActor.Setup(_s.Brain, _s.P, _s.Seed, 0, [], null, [], _s.RegionOf);
         _clock = Context.ActorOf(Props.Create(() => new ClockActor(setup)), $"clock-{_generation++}");
         _clock.Tell(new Subscribe(_bridge));
         foreach (var group in _stimulus.GroupBy(kv => kv.Value, kv => kv.Key))

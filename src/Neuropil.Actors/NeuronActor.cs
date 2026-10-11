@@ -133,7 +133,7 @@ public sealed class NeuronActor : ReceiveActor
 
     void OnAck(SpikeAck m)
     {
-        if (m.Woke) _woken.Add(m.Neuron);
+        if (m.Woke) _woken.Add(m.Unit);
         if (--_awaitingAcks == 0) ReportDone();
     }
 
@@ -141,7 +141,7 @@ public sealed class NeuronActor : ReceiveActor
     {
         bool active = _watched || _poissonThreshold > 0 || _v != _p.VRest || _g != 0 || Array.Exists(_pending, x => x != 0);
         _idle = !active;
-        _clock.Tell(new EpochDone(_s.Index, _spikes, active, [.. _woken], _voltages));
+        _clock.Tell(new EpochDone(_s.Index, [.. _spikes.Select(t => (t, _s.Index))], active, [.. _woken], _voltages));
         _woken.Clear();
     }
 }
