@@ -25,6 +25,8 @@ export type Palette = {
   sensory: string;
   output: string;
   select: string;
+  sugar: string;
+  water: string;
 };
 
 /** Canvas can't read CSS variables by itself, so the views take colours from here. */
@@ -42,6 +44,8 @@ export function readPalette(): Palette {
     sensory: token("--sensory"),
     output: token("--output"),
     select: token("--select"),
+    sugar: token("--sugar"),
+    water: token("--water"),
   };
 }
 

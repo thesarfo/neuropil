@@ -156,7 +156,7 @@ export class FlyWorld {
 
     for (const drop of this.drops) {
       c.globalAlpha = 0.85;
-      c.fillStyle = drop.kind === "sugar" ? p.excitatory : p.inhibitory;
+      c.fillStyle = drop.kind === "sugar" ? p.sugar : p.water;
       c.beginPath();
       c.arc(drop.x, drop.y, this.dropRadius(drop), 0, Math.PI * 2);
       c.fill();
