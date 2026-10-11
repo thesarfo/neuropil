@@ -11,6 +11,7 @@ const string Usage = """
       neuropil circuit <brain.bin> <preset.txt> [--size 500] [--out circuit.bin]
       neuropil compare <brain.bin> <preset.txt> [--ms 1000] [--rate 150] [--seed 1] [--trial 0] [--regions N]
       neuropil bench   <brain.bin> <preset.txt> [--ms 1000] [--regions 8,32,128] [--neurons true]
+                       [--meta brain.meta.json --split 0,4000,1000]   real brain regions, cut to a maximum size
 
     circuit keeps the preset's neurons plus the most active neurons of a one-second array run.
     compare runs array mode and actor mode and checks they spike identically. Actor mode is one
@@ -132,12 +133,22 @@ switch (args[0])
             Console.WriteLine($"| {mode} | {wall:F2} | {steps / wall:N0} | {simSeconds / wall:F3} | {(same ? "yes" : "NO")} |");
         Row("array, 1 thread", clock.Elapsed.TotalSeconds, true);
 
-        var modes = opts.GetValueOrDefault("regions", "8,32,128").Split(',').Select(int.Parse).Select(k => (Name: $"{k} region actors", Regions: (int?)k)).ToList();
+        var modes = opts.GetValueOrDefault("regions", "8,32,128").Split(',', StringSplitOptions.RemoveEmptyEntries).Select(int.Parse)
+            .Select(k => (Name: $"{k} equal blocks", RegionOf: (int[]?)[.. Enumerable.Range(0, brain.NeuronCount).Select(i => (int)((long)i * k / brain.NeuronCount))]))
+            .ToList();
+        if (opts.TryGetValue("meta", out var metaPath))
+        {
+            var meta = BrainMeta.Load(metaPath);
+            foreach (int max in opts.GetValueOrDefault("split", "0").Split(',').Select(int.Parse))
+            {
+                int[] unitOf = meta.Partition(max > 0 ? max : int.MaxValue);
+                modes.Add(($"brain regions{(max > 0 ? $" up to {max:N0}" : "")}: {unitOf.Max() + 1} actors", unitOf));
+            }
+        }
         if (opts.GetValueOrDefault("neurons") == "true") modes.Add(("one actor per neuron", null));
         bool allSame = true;
-        foreach (var (name, k) in modes)
+        foreach (var (name, regionOf) in modes)
         {
-            int[]? regionOf = k is { } count ? [.. Enumerable.Range(0, brain.NeuronCount).Select(i => (int)((long)i * count / brain.NeuronCount))] : null;
             clock.Restart();
             await using var actors = new ActorSimulator(brain, stimulated, seed: seed, rateHz: rate, regionOf: regionOf);
             double setup = clock.Elapsed.TotalSeconds;
