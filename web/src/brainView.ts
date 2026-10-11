@@ -20,6 +20,7 @@ export class BrainView {
   private readonly flash = new Map<number, number>();
   private rates = new Map<number, number>();
   private selected: number | null = null;
+  private silenced: ReadonlySet<number> = new Set();
   private lastDraw = performance.now();
 
   constructor(
@@ -51,6 +52,10 @@ export class BrainView {
 
   setSelected(neuron: number | null): void {
     this.selected = neuron;
+  }
+
+  setSilenced(silenced: ReadonlySet<number>): void {
+    this.silenced = silenced;
   }
 
   setRates(rates: Map<number, number>): void {
@@ -161,11 +166,28 @@ export class BrainView {
       c.fillText(label, this.px[neuron] + 9, this.py[neuron] + 4);
     }
 
+    this.drawSilenced(this.px, this.py, 5);
+
     if (this.selected !== null) {
       c.strokeStyle = this.palette.select;
       c.lineWidth = 2;
       c.beginPath();
       c.arc(this.px[this.selected], this.py[this.selected], 8, 0, Math.PI * 2);
+      c.stroke();
+    }
+  }
+
+  /** Marks neurons whose outputs have been cut. */
+  private drawSilenced(x: ArrayLike<number>, y: ArrayLike<number>, reach: number): void {
+    const c = this.context;
+    c.strokeStyle = this.palette.fg;
+    c.lineWidth = 1.6;
+    for (const neuron of this.silenced) {
+      c.beginPath();
+      c.moveTo(x[neuron] - reach, y[neuron] - reach);
+      c.lineTo(x[neuron] + reach, y[neuron] + reach);
+      c.moveTo(x[neuron] + reach, y[neuron] - reach);
+      c.lineTo(x[neuron] - reach, y[neuron] + reach);
       c.stroke();
     }
   }

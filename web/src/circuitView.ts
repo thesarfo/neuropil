@@ -18,6 +18,7 @@ export class CircuitView {
   private flash = new Float32Array(0);
   private edgeLayer: HTMLCanvasElement | null = null;
   private selected: number | null = null;
+  private silenced: ReadonlySet<number> = new Set();
   private lastDraw = performance.now();
 
   constructor(
@@ -48,6 +49,10 @@ export class CircuitView {
 
   setSelected(neuron: number | null): void {
     this.selected = neuron;
+  }
+
+  setSilenced(silenced: ReadonlySet<number>): void {
+    this.silenced = silenced;
   }
 
   spike(neuron: number): void {
@@ -182,6 +187,8 @@ export class CircuitView {
       c.fillText(label, this.x[i] + this.radius * 1.5 + 5, this.y[i] + 4);
     });
 
+    this.drawSilenced(this.x, this.y, this.radius + 3);
+
     if (this.selected !== null) {
       c.strokeStyle = this.palette.select;
       c.lineWidth = 2;
@@ -207,5 +214,20 @@ export class CircuitView {
       c.stroke();
     }
     c.globalAlpha = 1;
+  }
+
+  /** Marks neurons whose outputs have been cut. */
+  private drawSilenced(x: ArrayLike<number>, y: ArrayLike<number>, reach: number): void {
+    const c = this.context;
+    c.strokeStyle = this.palette.fg;
+    c.lineWidth = 1.6;
+    for (const neuron of this.silenced) {
+      c.beginPath();
+      c.moveTo(x[neuron] - reach, y[neuron] - reach);
+      c.lineTo(x[neuron] + reach, y[neuron] + reach);
+      c.moveTo(x[neuron] + reach, y[neuron] - reach);
+      c.lineTo(x[neuron] - reach, y[neuron] + reach);
+      c.stroke();
+    }
   }
 }

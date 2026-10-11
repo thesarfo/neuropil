@@ -50,6 +50,9 @@ const ui = {
   window: $("window"),
   compare: $<HTMLTableElement>("compare"),
   pinnedName: $("pinned-name"),
+  silencedNote: $("silenced-note"),
+  silencedCount: $("silenced-count"),
+  restoreAll: $<HTMLButtonElement>("restore-all"),
   circuitCanvas: $<HTMLCanvasElement>("circuit-view"),
   brainCanvas: $<HTMLCanvasElement>("brain-view"),
   flyCanvas: $<HTMLCanvasElement>("fly-view"),
@@ -73,6 +76,7 @@ let step = 0;
 let selected: number | null = null;
 let rates = new Map<number, number>();
 let lastListUpdate = 0;
+let silenced = new Set<number>();
 
 // Spike counts since the stimulus last changed, for average rates steadier than the 100 ms window.
 let counts = new Float64Array(0);
@@ -184,6 +188,8 @@ function show(next: Subject, view: CircuitView | BrainView, status: string, with
   counts = new Float64Array(next.count);
   pinned = null;
   restartAverage();
+  silenced = new Set();
+  renderSilenced();
 
   ui.stimulus.replaceChildren(...next.stimuli.map((s) => new Option(s.info.title, s.name)));
   ui.stimulus.parentElement!.hidden = next.stimuli.length < 2 || withBody;
@@ -283,6 +289,26 @@ function renderStimulus(): void {
 function sendStimulus(rateHz: number): void {
   const sensory = stimulus()?.sensory;
   connection.send(sensory ? { type: "stimulate", rateHz, neurons: sensory } : { type: "stimulate", rateHz });
+}
+
+/** Cuts a neuron's outputs, or restores them. It still fires; nothing downstream hears it. */
+function setSilenced(neurons: number[], on: boolean): void {
+  for (const neuron of neurons) {
+    if (on) silenced.add(neuron);
+    else silenced.delete(neuron);
+  }
+  connection.send({ type: "silence", neurons, silenced: on });
+  restartAverage();
+  renderSilenced();
+}
+
+function renderSilenced(): void {
+  circuitView.setSilenced(silenced);
+  brainView.setSilenced(silenced);
+  ui.silencedNote.hidden = silenced.size === 0;
+  ui.silencedCount.textContent = `${silenced.size} ${silenced.size === 1 ? "neuron" : "neurons"} silenced.`;
+  const toggle = document.getElementById("silence-toggle");
+  if (toggle && selected !== null) toggle.textContent = silenced.has(selected) ? "Restore this neuron" : "Silence this neuron";
 }
 
 function restartAverage(): void {
@@ -475,7 +501,15 @@ function select(neuron: number | null): void {
   if (known) neighbours.append(...neighbourLists(known.inputs, known.outputs));
   else connection.send({ type: "neighbours", neuron });
 
-  ui.inspector.replaceChildren(facts, ui.trace, neighbours);
+  const toggle = document.createElement("button");
+  toggle.id = "silence-toggle";
+  toggle.type = "button";
+  toggle.className = "silence";
+  toggle.title = "A silenced neuron still fires, but its outputs are cut";
+  toggle.addEventListener("click", () => setSilenced([neuron], !silenced.has(neuron)));
+
+  ui.inspector.replaceChildren(facts, toggle, ui.trace, neighbours);
+  renderSilenced();
   renderSelectedRate();
 }
 
@@ -510,6 +544,8 @@ ui.rate.addEventListener("input", () => {
   restartAverage();
   sendStimulus(Number(ui.rate.value));
 });
+
+ui.restoreAll.addEventListener("click", () => setSilenced([...silenced], false));
 
 ui.pin.addEventListener("click", () => {
   pinned = { name: stimulating ? `${ui.rate.value} Hz` : "No stimulus", rates: averageRates() };

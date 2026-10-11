@@ -81,4 +81,5 @@ export type ClientMessage =
   | { type: "speed"; value: number | "max" }
   | { type: "watch"; neuron: number | null }
   | { type: "neighbours"; neuron: number }
+  | { type: "silence"; neurons: number[]; silenced: boolean }
   | { type: "sense"; levels: Record<string, number> };

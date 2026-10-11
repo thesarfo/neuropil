@@ -99,6 +99,8 @@ ol, ul { list-style: none; }
 }
 .bar h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
 .status { margin-left: auto; color: var(--muted); font-size: 13px; }
+.link { border: 0; background: none; padding: 0; min-height: 0; font-size: inherit; color: var(--fg); text-decoration: underline; text-underline-offset: 3px; }
+.silence { align-self: flex-start; margin-top: 8px; }
 .theme { border: 0; background: none; padding: 0; min-height: 0; font-size: 13px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .theme:hover { color: var(--fg); }
 .status[data-state="closed"] { color: var(--danger); }
