@@ -83,4 +83,44 @@ public class RegionModeTests
         Assert.Equal(expected, actual);
         Assert.Equal(expectedVolts, volts);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Silencing_and_restoring_mid_run_matches_array_mode(bool regions)
+    {
+        var brain = ActorSimulatorTests.RandomBrain(200, 12, 4);
+        int[] stimulated = [0, 1, 2, 3, 4, 5, 6, 7];
+
+        var array = new ArraySimulator(brain, seed: 11);
+        array.Stimulate(stimulated);
+        var free = new int[brain.NeuronCount];
+        for (int s = 0; s < 1000; s++)
+            foreach (int i in array.Advance()) free[i]++;
+        int[] knockedOut = [.. Enumerable.Range(8, brain.NeuronCount - 8).OrderByDescending(i => free[i]).Take(10)];
+
+        array = new ArraySimulator(brain, seed: 11);
+        array.Stimulate(stimulated);
+        await using var actors = new ActorSimulator(brain, stimulated, seed: 11, regionOf: regions ? RandomRegions(200, 8, 1) : null);
+
+        var expected = new List<(long, int)>();
+        var actual = new List<(long, int)>();
+        var phases = new List<int>();
+        foreach (bool silenced in new[] { false, true, false })
+        {
+            array.Silence(knockedOut, silenced);
+            actors.Silence(knockedOut, silenced);
+            int before = expected.Count;
+            for (long s = 0; s < 1000; s++)
+            {
+                long at = array.Step;
+                foreach (int i in array.Advance()) expected.Add((at, i));
+            }
+            actual.AddRange(await actors.RunAsync(1000));
+            phases.Add(expected.Count - before);
+        }
+
+        Assert.NotEqual(phases[0], phases[1]);
+        Assert.Equal(expected, actual);
+    }
 }

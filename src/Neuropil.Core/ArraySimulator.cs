@@ -62,9 +62,9 @@ public sealed class ArraySimulator
         }
     }
 
-    public void Silence(IEnumerable<int> neurons)
+    public void Silence(IEnumerable<int> neurons, bool silenced = true)
     {
-        foreach (int i in neurons) _silenced[i] = true;
+        foreach (int i in neurons) _silenced[i] = silenced;
     }
 
     public void Inject(int neuron, int synapses) => _g[neuron] += synapses * _p.WeightPerSynapse;

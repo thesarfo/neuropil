@@ -17,6 +17,7 @@ public sealed record Neighbours(int Neuron);
 ///   {"type":"step","steps":1}
 ///   {"type":"speed","value":0.05}                        or "max"
 ///   {"type":"watch","neuron":33}                         or null to stop; streams that neuron's voltage
+///   {"type":"silence","neurons":[33],"silenced":true}    cut those neurons' outputs, or restore them
 ///   {"type":"neighbours","neuron":33}                    whole brain only: strongest inputs and outputs
 ///   {"type":"sense","levels":{"sugar":0.6}}              embodied fly only: sensor levels from 0 to 1
 /// </summary>
@@ -86,6 +87,22 @@ public static class ClientMessage
                     if (!w.TryGetInt32(out int watched) || watched < 0 || watched >= circuit.Brain.NeuronCount)
                         return Fail($"neuron must be null or an index from 0 to {circuit.Brain.NeuronCount - 1}");
                     return (new Watch(watched), null);
+                }
+
+                case "silence":
+                {
+                    if (!root.TryGetProperty("silenced", out var flag) || flag.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                        return Fail("silence needs \"silenced\": true or false");
+                    if (!root.TryGetProperty("neurons", out var n) || n.ValueKind != JsonValueKind.Array || n.GetArrayLength() == 0)
+                        return Fail("silence needs a non-empty \"neurons\" array");
+                    var list = new List<int>();
+                    foreach (var item in n.EnumerateArray())
+                    {
+                        if (!item.TryGetInt32(out int i) || i < 0 || i >= circuit.Brain.NeuronCount)
+                            return Fail($"neuron indexes must be from 0 to {circuit.Brain.NeuronCount - 1}");
+                        list.Add(i);
+                    }
+                    return (new Silence(list, flag.GetBoolean()), null);
                 }
 
                 case "sense":

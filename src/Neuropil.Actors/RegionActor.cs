@@ -94,6 +94,7 @@ public sealed class RegionActor : ReceiveActor
         Receive<SpikeAck>(OnAck);
         Receive<SetStimulus>(m => SetStimulus(s.LocalIndex[m.Neuron], m.PoissonThreshold));
         Receive<SetWatched>(m => _watched = m.Watched ? s.LocalIndex[m.Neuron] : -1);
+        Receive<SetSilenced>(m => _silenced[s.LocalIndex[m.Neuron]] = m.Silenced);
     }
 
     void SetStimulus(int local, ulong threshold)

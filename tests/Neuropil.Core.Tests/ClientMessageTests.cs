@@ -67,6 +67,25 @@ public class ClientMessageTests
         Assert.Equal(new Watch(null), Parse("""{"type":"watch","neuron":null}""", Loaded).Command);
     }
 
+    [Fact]
+    public void Silence_takes_neurons_and_a_flag()
+    {
+        var on = Assert.IsType<Silence>(Parse("""{"type":"silence","neurons":[3,4],"silenced":true}""", Loaded).Command);
+        Assert.Equal([3, 4], on.Neurons);
+        Assert.True(on.Silenced);
+        Assert.False(Assert.IsType<Silence>(Parse("""{"type":"silence","neurons":[3],"silenced":false}""", Loaded).Command).Silenced);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"silence","neurons":[3]}""")]
+    [InlineData("""{"type":"silence","neurons":[],"silenced":true}""")]
+    [InlineData("""{"type":"silence","neurons":[10],"silenced":true}""")]
+    [InlineData("""{"type":"silence","neurons":[1],"silenced":"yes"}""")]
+    public void Bad_silence_messages_are_rejected(string json)
+    {
+        Assert.NotNull(Parse(json, Loaded).Error);
+    }
+
     static readonly Circuit Embodied = Loaded with { Sensors = new HashSet<string> { "sugar", "antenna" } };
 
     [Fact]

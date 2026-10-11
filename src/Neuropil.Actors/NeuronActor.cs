@@ -28,7 +28,7 @@ public sealed class NeuronActor : ReceiveActor
     // Indexed by arrival step mod two epochs; arrivals always fall in the current or next one.
     readonly int[] _pending;
 
-    bool _idle, _watched;
+    bool _idle, _watched, _silenced;
     double[]? _voltages;
     int _awaitingAcks;
     long[] _spikes = [];
@@ -42,6 +42,7 @@ public sealed class NeuronActor : ReceiveActor
         _flywireId = s.Brain.FlywireIds[s.Index];
         (_decayV, _decayG, _gToV) = (_p.DecayV, _p.DecayG, _p.GToV);
         SetStimulus(s.PoissonThreshold);
+        _silenced = s.Silenced;
         _v = _p.VRest;
         _pending = new int[2 * _p.DelaySteps];
 
@@ -50,6 +51,7 @@ public sealed class NeuronActor : ReceiveActor
         Receive<SpikeAck>(OnAck);
         Receive<SetStimulus>(m => SetStimulus(m.PoissonThreshold));
         Receive<SetWatched>(m => _watched = m.Watched);
+        Receive<SetSilenced>(m => _silenced = m.Silenced);
     }
 
     void SetStimulus(ulong threshold)
@@ -71,7 +73,7 @@ public sealed class NeuronActor : ReceiveActor
         _spikes = [.. spikes];
 
         var targets = _s.Brain.TargetsOf(_s.Index);
-        if (_spikes.Length == 0 || _s.Silenced || targets.Length == 0)
+        if (_spikes.Length == 0 || _silenced || targets.Length == 0)
         {
             ReportDone();
             return;

@@ -33,6 +33,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
     readonly IActorRef _bridge;
     readonly IActorRef? _body;
     readonly Dictionary<int, double> _stimulus = [];
+    readonly HashSet<int> _silenced = [];
     readonly Stopwatch _wall = Stopwatch.StartNew();
 
     IActorRef _clock = ActorRefs.Nobody;
@@ -73,6 +74,11 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
             _clock.Tell(m);
             _bridge.Tell(m);
         });
+        Receive<Silence>(m =>
+        {
+            if (m.Silenced) _silenced.UnionWith(m.Neurons); else _silenced.ExceptWith(m.Neurons);
+            _clock.Tell(m);
+        });
         Receive<Sense>(m => _body?.Tell(m));
         Receive<Continue>(_ => Advance());
         Receive<RunResult>(_ =>
@@ -92,6 +98,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
         foreach (var group in _stimulus.GroupBy(kv => kv.Value, kv => kv.Key))
             _clock.Tell(new Stimulate([.. group], group.Key));
         if (_watched is not null) _clock.Tell(new Watch(_watched));
+        if (_silenced.Count > 0) _clock.Tell(new Silence([.. _silenced], true));
     }
 
     void DoReset()

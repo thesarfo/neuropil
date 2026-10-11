@@ -39,5 +39,7 @@ public sealed class ActorSimulator : IAsyncDisposable
 
     public void Stimulate(IEnumerable<int> neurons, double rateHz) => _clock.Tell(new Stimulate([.. neurons], rateHz));
 
+    public void Silence(IEnumerable<int> neurons, bool silenced = true) => _clock.Tell(new Silence([.. neurons], silenced));
+
     public async ValueTask DisposeAsync() => await _system.Terminate();
 }

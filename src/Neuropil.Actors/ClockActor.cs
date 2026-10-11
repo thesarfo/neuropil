@@ -84,6 +84,10 @@ public sealed class ClockActor : ReceiveActor
         Receive<Subscribe>(m => _subscribers.Add(m.Subscriber));
         Receive<Stimulate>(OnStimulate);
         Receive<Watch>(OnWatch);
+        Receive<Silence>(m =>
+        {
+            foreach (int i in m.Neurons) _units[_unitOf[i]].Tell(new SetSilenced(i, m.Silenced));
+        });
     }
 
     void Wake(int neuron) => (_outstanding > 0 ? _nextActive : _active)[_unitOf[neuron]] = true;

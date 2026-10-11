@@ -25,6 +25,11 @@ public sealed record Stimulate(IReadOnlyList<int> Neurons, double RateHz);
 
 public sealed record SetStimulus(int Neuron, ulong PoissonThreshold);
 
+// A silenced neuron still fires but nobody hears it. Takes effect at the next epoch boundary.
+public sealed record Silence(IReadOnlyList<int> Neurons, bool Silenced);
+
+public sealed record SetSilenced(int Neuron, bool Silenced);
+
 public sealed record Subscribe(IActorRef Subscriber);
 
 public sealed record EpochSpikes(
