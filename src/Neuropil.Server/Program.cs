@@ -14,6 +14,10 @@ string[] origins = settings.GetSection("AllowedOrigins").Get<string[]>()
 if (string.IsNullOrEmpty(builder.Configuration["urls"])) builder.WebHost.UseUrls("http://127.0.0.1:5080");
 
 builder.Services.AddSingleton(_ => CircuitLibrary.Load(circuitsDir, presetsDir));
+var atlas = Atlas.Load(
+    Path.Combine(root, settings["Brain"] ?? "data/brain.bin"),
+    Path.Combine(root, settings["BrainMeta"] ?? "data/brain.meta.json"),
+    presetsDir);
 builder.Services.AddSingleton(_ => ActorSystem.Create("neuropil", ConfigurationFactory.ParseString("""
     akka.loglevel = WARNING
     akka.stdout-loglevel = WARNING
@@ -32,6 +36,8 @@ app.Lifetime.ApplicationStopping.Register(() => app.Services.GetRequiredService<
 app.MapGet("/api/circuits", (CircuitLibrary library) =>
     library.All.Select(c => new { name = c.Name, neurons = c.Brain.NeuronCount, edges = c.Brain.EdgeCount, sensory = c.Sensory.Count }));
 
+app.MapGet("/api/brain/meta", () => atlas is null ? Results.NotFound() : Results.File(atlas.MetaPath, "application/json"));
+
 app.Map("/ws", async (HttpContext context, CircuitLibrary library, ActorSystem system, ILogger<Connection> logger) =>
 {
     if (!context.WebSockets.IsWebSocketRequest)
@@ -40,11 +46,13 @@ app.Map("/ws", async (HttpContext context, CircuitLibrary library, ActorSystem s
         return;
     }
     using var socket = await context.WebSockets.AcceptWebSocketAsync();
-    await new Connection(socket, library, system, logger).RunAsync(context.RequestAborted);
+    await new Connection(socket, library, atlas, system, logger).RunAsync(context.RequestAborted);
 });
 
 var circuits = app.Services.GetRequiredService<CircuitLibrary>().All.ToList();
 app.Logger.LogInformation("{Count} circuit(s) in {Dir}: {Names}", circuits.Count, Path.GetFullPath(circuitsDir), string.Join(", ", circuits.Select(c => c.Name)));
+
+if (atlas is not null) app.Logger.LogInformation("Whole brain: {Neurons} neurons in {Actors} region actors", atlas.Brain.NeuronCount, atlas.Actors);
 
 app.Run();
 

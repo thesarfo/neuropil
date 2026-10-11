@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Neuropil.Core;
 
 namespace Neuropil.Server;
@@ -31,35 +30,14 @@ public sealed class CircuitLibrary
         var circuits = new List<Circuit>();
         if (!Directory.Exists(circuitsDir)) return new CircuitLibrary(circuits);
 
-        string infoPath = Path.Combine(presetsDir, "circuits.json");
-        var info = File.Exists(infoPath)
-            ? JsonSerializer.Deserialize<Dictionary<string, CircuitInfo>>(File.ReadAllText(infoPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))!
-            : [];
-
+        var info = Presets.ReadInfo(presetsDir);
         foreach (string path in Directory.EnumerateFiles(circuitsDir, "*.bin").Order())
         {
             string name = Path.GetFileNameWithoutExtension(path);
             var brain = Brain.Load(path);
             string preset = Path.Combine(presetsDir, name + ".txt");
-            var sensory = File.Exists(preset)
-                ? File.ReadLines(preset)
-                    .Where(l => l.Trim() is { Length: > 0 } t && !t.StartsWith('#'))
-                    .Select(l => brain.IndexOf(long.Parse(l)))
-                    .Where(i => i >= 0)
-                    .ToList()
-                : [];
-
-            var labels = new Dictionary<int, string>();
-            string outputs = Path.Combine(presetsDir, name + ".outputs.txt");
-            if (File.Exists(outputs))
-            {
-                foreach (string line in File.ReadLines(outputs))
-                {
-                    var parts = line.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                    if (parts.Length == 2 && long.TryParse(parts[0], out long id) && brain.IndexOf(id) is >= 0 and int index)
-                        labels[index] = parts[1];
-                }
-            }
+            var sensory = File.Exists(preset) ? Presets.ReadNeurons(preset, brain) : [];
+            var labels = Presets.ReadLabels(Path.Combine(presetsDir, name + ".outputs.txt"), brain);
             circuits.Add(new Circuit(name, brain, sensory, labels, info.GetValueOrDefault(name)));
         }
         return new CircuitLibrary(circuits);

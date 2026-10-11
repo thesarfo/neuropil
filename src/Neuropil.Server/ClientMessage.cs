@@ -5,6 +5,8 @@ namespace Neuropil.Server;
 
 public sealed record LoadCircuit(string Name);
 
+public sealed record Neighbours(int Neuron);
+
 /// <summary>
 /// Parses and validates one message from the browser. Returns either a command or an error
 /// to send back; nothing from the client reaches an actor unchecked.
@@ -15,6 +17,7 @@ public sealed record LoadCircuit(string Name);
 ///   {"type":"step","steps":1}
 ///   {"type":"speed","value":0.05}                        or "max"
 ///   {"type":"watch","neuron":33}                         or null to stop; streams that neuron's voltage
+///   {"type":"neighbours","neuron":33}                    whole brain only: strongest inputs and outputs
 /// </summary>
 public static class ClientMessage
 {
@@ -82,6 +85,13 @@ public static class ClientMessage
                     if (!w.TryGetInt32(out int watched) || watched < 0 || watched >= circuit.Brain.NeuronCount)
                         return Fail($"neuron must be null or an index from 0 to {circuit.Brain.NeuronCount - 1}");
                     return (new Watch(watched), null);
+                }
+
+                case "neighbours":
+                {
+                    if (!root.TryGetProperty("neuron", out var n) || !n.TryGetInt32(out int of) || of < 0 || of >= circuit.Brain.NeuronCount)
+                        return Fail($"neuron must be an index from 0 to {circuit.Brain.NeuronCount - 1}");
+                    return (new Neighbours(of), null);
                 }
 
                 case "stimulate":

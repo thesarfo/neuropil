@@ -8,7 +8,7 @@ using Neuropil.Core;
 namespace Neuropil.Server;
 
 /// <summary>One browser tab: its WebSocket, and the session actor it drives.</summary>
-public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSystem system, ILogger logger)
+public sealed class Connection(WebSocket socket, CircuitLibrary library, Atlas? atlas, ActorSystem system, ILogger logger)
 {
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -31,6 +31,7 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
             {
                 type = "hello",
                 circuits = library.All.Select(c => new { name = c.Name, title = c.Info?.Title ?? c.Name, neurons = c.Brain.NeuronCount, edges = c.Brain.EdgeCount }),
+                brain = atlas is null ? null : new { name = Atlas.Name, neurons = atlas.Brain.NeuronCount, edges = atlas.Brain.EdgeCount },
             }, linked.Token);
             await ReceiveAsync(linked.Token);
         }
@@ -73,12 +74,45 @@ public sealed class Connection(WebSocket socket, CircuitLibrary library, ActorSy
             var (command, error) = ClientMessage.Parse(buffer.AsSpan(0, length), _circuit);
             if (error is not null) await SendAsync(new { type = "error", message = error }, stop);
             else if (command is LoadCircuit load) await LoadAsync(load.Name, stop);
+            else if (command is Neighbours of) await SendNeighboursAsync(of.Neuron, stop);
             else _session.Tell(command!);
         }
     }
 
+    async Task SendNeighboursAsync(int neuron, CancellationToken stop)
+    {
+        if (atlas is null || _circuit?.Brain != atlas.Brain) return;
+        var (inputs, outputs) = atlas.Neighbours(neuron);
+        await SendAsync(new { type = "neighbours", neuron, id = atlas.Brain.FlywireIds[neuron].ToString(), inputs, outputs }, stop);
+    }
+
+    async Task LoadBrainAsync(Atlas atlas, CancellationToken stop)
+    {
+        if (!_session.IsNobody()) system.Stop(_session);
+        _circuit = new Circuit(Atlas.Name, atlas.Brain, []);
+        await SendAsync(new
+        {
+            type = "brain",
+            name = Atlas.Name,
+            dtMs = LifParams.Default.Dt,
+            neurons = atlas.Brain.NeuronCount,
+            actors = atlas.Actors,
+            inhibitory = atlas.Inhibitory,
+            labels = atlas.Labels.Select(kv => new { neuron = kv.Key, label = kv.Value }),
+            stimuli = atlas.Stimuli.Select(s => new { name = s.Name, info = s.Info, sensory = s.Sensory }),
+        }, stop);
+
+        var setup = new SessionActor.Setup(atlas.Brain, LifParams.Default, 1, _frames.Writer, atlas.UnitOf);
+        _session = system.ActorOf(Props.Create(() => new SessionActor(setup)));
+    }
+
     async Task LoadAsync(string name, CancellationToken stop)
     {
+        if (name == Atlas.Name && atlas is not null)
+        {
+            await LoadBrainAsync(atlas, stop);
+            return;
+        }
         if (library.Find(name) is not { } circuit)
         {
             await SendAsync(new { type = "error", message = $"no circuit named \"{name}\"" }, stop);
