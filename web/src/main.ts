@@ -10,7 +10,7 @@ import { CircuitView } from "./circuitView";
 import { FlyView } from "./flyView";
 import { FlyWorld, type DropKind } from "./flyWorld";
 import { CircuitModel } from "./model";
-import type { BrainMessage, BrainMeta, FrameMessage, NeighboursMessage, ServerMessage } from "./protocol";
+import type { BrainMessage, BrainMeta, ClientMessage, FrameMessage, NeighboursMessage, ServerMessage } from "./protocol";
 import { RasterView } from "./rasterView";
 import { Connection, type ConnectionState } from "./socket";
 import type { Edge, Subject } from "./subject";
@@ -102,10 +102,11 @@ let embodied = false;
 let lastTimeMs = 0;
 let sentSenses = "";
 
-// For poking at the fly, and recording it, from the browser console.
-(window as unknown as { neuropil: unknown }).neuropil = { world, flyView, brainView };
 
 const connection = new Connection(onMessage, onConnectionState);
+
+// For poking at the fly, and recording it, from the browser console.
+(window as unknown as { neuropil: unknown }).neuropil = { world, flyView, brainView, send: (message: ClientMessage) => connection.send(message) };
 
 function onConnectionState(state: ConnectionState): void {
   ui.status.dataset.state = state;
