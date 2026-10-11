@@ -1,0 +1,9 @@
+.git
+data
+docs
+**/bin
+**/obj
+**/node_modules
+src/Neuropil.Server/wwwroot
+tests
+prep

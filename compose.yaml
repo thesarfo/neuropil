@@ -1,0 +1,9 @@
+# docker compose up --build, then open http://localhost:5080
+# Expects the prepared data in ./data (brain.bin, brain.meta.json, circuits/).
+services:
+  neuropil:
+    build: .
+    ports:
+      - "127.0.0.1:5080:5080"
+    volumes:
+      - ./data:/app/data:ro
