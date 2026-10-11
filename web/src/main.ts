@@ -1,9 +1,12 @@
+import { BrainModel } from "./brainModel";
+import { BrainView } from "./brainView";
 import { neuronColour, readPalette } from "./canvas";
 import { CircuitView } from "./circuitView";
 import { CircuitModel } from "./model";
-import type { FrameMessage, ServerMessage } from "./protocol";
+import type { BrainMessage, BrainMeta, FrameMessage, NeighboursMessage, ServerMessage } from "./protocol";
 import { RasterView } from "./rasterView";
 import { Connection, type ConnectionState } from "./socket";
+import type { Edge, Subject } from "./subject";
 import { TraceView } from "./traceView";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -11,6 +14,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const ui = {
   status: $("status"),
   circuit: $<HTMLSelectElement>("circuit"),
+  stimulus: $<HTMLSelectElement>("stimulus"),
   stimulate: $<HTMLButtonElement>("stimulate"),
   rate: $<HTMLInputElement>("rate"),
   rateOut: $("rate-out"),
@@ -28,13 +32,19 @@ const ui = {
   window: $("window"),
   compare: $<HTMLTableElement>("compare"),
   pinnedName: $("pinned-name"),
+  circuitCanvas: $<HTMLCanvasElement>("circuit-view"),
+  brainCanvas: $<HTMLCanvasElement>("brain-view"),
+  rasterCaption: $("raster-caption"),
   inspector: $("inspector-body"),
   trace: $<HTMLCanvasElement>("trace-view"),
   top: $("top"),
+  regionsHeading: $("regions-heading"),
+  regions: $("regions"),
 };
 
 let palette = readPalette();
-let model: CircuitModel | null = null;
+let subject: Subject | null = null;
+let brainMeta: Promise<BrainMeta> | null = null;
 let running = false;
 let stimulating = false;
 let step = 0;
@@ -48,9 +58,11 @@ let countFromStep = 0;
 let countsIncomplete = false;
 let pinned: { name: string; rates: Float64Array } | null = null;
 
-const circuitView = new CircuitView($<HTMLCanvasElement>("circuit-view"), palette, select);
+const circuitView = new CircuitView(ui.circuitCanvas, palette, select);
+const brainView = new BrainView(ui.brainCanvas, palette, select);
 const rasterView = new RasterView($<HTMLCanvasElement>("raster-view"), palette);
 const traceView = new TraceView(ui.trace, palette);
+let stage: CircuitView | BrainView = circuitView;
 
 const connection = new Connection(onMessage, onConnectionState);
 
@@ -65,37 +77,32 @@ function onConnectionState(state: ConnectionState): void {
 
 function onMessage(message: ServerMessage): void {
   switch (message.type) {
-    case "hello":
-      ui.circuit.replaceChildren(...message.circuits.map((c) => new Option(`${c.title} (${c.neurons} neurons)`, c.name)));
-      if (message.circuits.length === 0) {
+    case "hello": {
+      const options = message.circuits.map((c) => new Option(`${c.title} (${c.neurons.toLocaleString()} neurons)`, c.name));
+      if (message.brain) options.push(new Option(`Whole brain (${message.brain.neurons.toLocaleString()} neurons)`, message.brain.name));
+      ui.circuit.replaceChildren(...options);
+      ui.status.textContent = "Connected";
+      if (options.length === 0) {
         showEmpty("No circuits found.\nBuild one with `neuropil circuit` and put it in data/circuits/.");
-        ui.status.textContent = "Connected";
         return;
       }
-      connection.send({ type: "load", circuit: model?.name ?? message.circuits[0].name });
+      load(subject?.name ?? options[0].value);
+      break;
+    }
+
+    case "circuit": {
+      const model = new CircuitModel(message);
+      circuitView.setModel(model);
+      show(model, circuitView, `${model.count} neurons, ${model.edges.length.toLocaleString()} connections`);
+      break;
+    }
+
+    case "brain":
+      void showBrain(message);
       break;
 
-    case "circuit":
-      model = new CircuitModel(message);
-      ui.circuit.value = model.name;
-      ui.empty.hidden = true;
-      stimulating = false;
-      rates = new Map();
-      step = 0;
-      counts = new Float64Array(model.count);
-      pinned = null;
-      restartAverage();
-      ui.about.textContent = model.info.about;
-      renderCompare();
-      circuitView.setModel(model);
-      rasterView.setModel(model);
-      traceView.clear(model.dtMs);
-      select(null);
-      buildOutputs();
-      setEnabled(true);
-      renderStimulate();
-      connection.send({ type: "speed", value: speedValue() });
-      ui.status.textContent = `${model.count} neurons, ${model.edges.length.toLocaleString()} connections`;
+    case "neighbours":
+      if (message.neuron === selected) renderNeighbours(message);
       break;
 
     case "frame":
@@ -109,24 +116,74 @@ function onMessage(message: ServerMessage): void {
   }
 }
 
+function load(name: string): void {
+  setEnabled(false);
+  ui.status.textContent = "Loading…";
+  connection.send({ type: "load", circuit: name });
+}
+
+async function showBrain(message: BrainMessage): Promise<void> {
+  ui.status.textContent = "Loading neuron positions…";
+  brainMeta ??= fetch("/api/brain/meta").then((response) => response.json() as Promise<BrainMeta>);
+  const model = new BrainModel(message, await brainMeta);
+  brainView.setModel(model);
+  show(model, brainView, `${model.count.toLocaleString()} neurons in ${model.actors} region actors`);
+}
+
+/** Switches the page to a newly loaded subject. The server session starts paused and unstimulated. */
+function show(next: Subject, view: CircuitView | BrainView, status: string): void {
+  subject = next;
+  stage = view;
+  ui.circuitCanvas.hidden = view !== circuitView;
+  ui.brainCanvas.hidden = view !== brainView;
+  ui.circuit.value = next.name;
+  ui.empty.hidden = true;
+  ui.status.textContent = status;
+  ui.status.dataset.state = "open";
+
+  stimulating = false;
+  running = false;
+  rates = new Map();
+  step = 0;
+  counts = new Float64Array(next.count);
+  pinned = null;
+  restartAverage();
+
+  ui.stimulus.replaceChildren(...next.stimuli.map((s) => new Option(s.info.title, s.name)));
+  ui.stimulus.parentElement!.hidden = next.stimuli.length < 2;
+  ui.rasterCaption.textContent = `· ${next.rasterCaption}`;
+  ui.regionsHeading.hidden = ui.regions.hidden = next.groups === null;
+
+  rasterView.setSubject(next);
+  traceView.clear(next.dtMs);
+  select(null);
+  buildOutputs();
+  renderStimulus();
+  renderCompare();
+  renderTop();
+  setEnabled(true);
+  connection.send({ type: "speed", value: speedValue() });
+}
+
 function onFrame(frame: FrameMessage): void {
-  if (!model) return;
+  if (!subject) return;
   if (frame.step < step) {
-    circuitView.clear();
+    stage.clear();
     rasterView.clear();
     traceView.clear();
     step = frame.step;
     restartAverage();
   }
   step = frame.step;
-  if (frame.truncated) countsIncomplete = true;
   running = frame.running;
+  if (frame.truncated) countsIncomplete = true;
   for (const [at, neuron] of frame.spikes) {
-    circuitView.spike(neuron);
+    stage.spike(neuron);
     counts[neuron]++;
     rasterView.add(at, neuron);
   }
   rates = new Map(frame.rates);
+  brainView.setRates(rates);
   if (frame.trace && frame.trace.neuron === selected) traceView.add(frame.trace.fromStep, frame.trace.mv);
 
   ui.clock.textContent = `${frame.timeMs.toFixed(1)} ms`;
@@ -145,7 +202,7 @@ function onFrame(frame: FrameMessage): void {
 }
 
 function setEnabled(enabled: boolean): void {
-  for (const control of [ui.circuit, ui.stimulate, ui.rate, ui.play, ui.step, ui.reset, ui.speed, ui.pin]) control.disabled = !enabled;
+  for (const control of [ui.circuit, ui.stimulus, ui.stimulate, ui.rate, ui.play, ui.step, ui.reset, ui.speed, ui.pin]) control.disabled = !enabled;
 }
 
 function showEmpty(text: string): void {
@@ -157,9 +214,20 @@ function speedValue(): number | "max" {
   return ui.speed.value === "max" ? "max" : Number(ui.speed.value);
 }
 
-function renderStimulate(): void {
+function stimulus() {
+  return subject?.stimuli.find((s) => s.name === ui.stimulus.value) ?? subject?.stimuli[0];
+}
+
+function renderStimulus(): void {
+  const info = stimulus()?.info;
+  ui.about.textContent = info?.about ?? "";
   ui.stimulate.setAttribute("aria-pressed", String(stimulating));
-  ui.stimulate.textContent = stimulating ? (model?.info.stop ?? "Stop") : (model?.info.start ?? "Stimulate");
+  ui.stimulate.textContent = (stimulating ? info?.stop : info?.start) ?? "Stimulate";
+}
+
+function sendStimulus(rateHz: number): void {
+  const sensory = stimulus()?.sensory;
+  connection.send(sensory ? { type: "stimulate", rateHz, neurons: sensory } : { type: "stimulate", rateHz });
 }
 
 function restartAverage(): void {
@@ -169,7 +237,7 @@ function restartAverage(): void {
 }
 
 function averagedMs(): number {
-  return (step - countFromStep) * (model?.dtMs ?? 0.1);
+  return (step - countFromStep) * (subject?.dtMs ?? 0.1);
 }
 
 function averageRates(): Float64Array {
@@ -178,36 +246,40 @@ function averageRates(): Float64Array {
 }
 
 function renderCompare(): void {
-  if (!model) return;
+  if (!subject) return;
+  const current = subject;
   const ms = averagedMs();
   ui.window.textContent = ms > 0 ? `Averaging ${ms.toFixed(0)} ms${countsIncomplete ? " (some spikes skipped at this speed)" : ""}` : "";
   ui.unpin.hidden = pinned === null;
   ui.compare.hidden = pinned === null;
   if (!pinned) return;
+  const before = pinned.rates;
 
   ui.pinnedName.textContent = pinned.name;
   const now = averageRates();
-  const labelled = model.labels.flatMap((label, neuron) => (label ? [neuron] : []));
-  const movers = [...now.keys()]
-    .filter((neuron) => !model!.labels[neuron])
-    .sort((a, b) => Math.abs(now[b] - pinned!.rates[b]) - Math.abs(now[a] - pinned!.rates[a]))
-    .slice(0, 4);
+  const change = (neuron: number) => Math.abs(now[neuron] - before[neuron]);
+  const movers: number[] = [];
+  for (let neuron = 0; neuron < now.length; neuron++) {
+    if (current.labels.has(neuron) || change(neuron) === 0) continue;
+    movers.push(neuron);
+  }
+  movers.sort((a, b) => change(b) - change(a));
 
-  const rows = [...labelled, ...movers].map((neuron) => {
+  const rows = [...current.labels.keys(), ...movers.slice(0, 4)].map((neuron) => {
     const row = document.createElement("tr");
     const name = document.createElement("td");
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = model!.nameOf(neuron);
+    button.textContent = current.nameOf(neuron);
     button.addEventListener("click", () => select(neuron));
     name.append(button);
-    const change = now[neuron] - pinned!.rates[neuron];
-    const cells = [pinned!.rates[neuron].toFixed(0), now[neuron].toFixed(0), `${change >= 0 ? "+" : "−"}${Math.abs(change).toFixed(0)}`].map((text) => {
+    const delta = now[neuron] - before[neuron];
+    const cells = [before[neuron].toFixed(0), now[neuron].toFixed(0), `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(0)}`].map((text) => {
       const cell = document.createElement("td");
       cell.textContent = text;
       return cell;
     });
-    if (Math.abs(change) >= 1) cells[2].className = change > 0 ? "up" : "down";
+    if (Math.abs(delta) >= 1) cells[2].className = delta > 0 ? "up" : "down";
     row.append(name, ...cells);
     return row;
   });
@@ -220,26 +292,42 @@ function neuronButton(neuron: number, amount: string): HTMLLIElement {
   button.type = "button";
   const dot = document.createElement("i");
   dot.className = "dot";
-  dot.style.background = neuronColour(palette, model!, neuron);
+  dot.style.background = neuronColour(palette, subject!, neuron);
   const value = document.createElement("span");
   value.className = "amount";
   value.textContent = amount;
-  button.append(dot, model!.nameOf(neuron), value);
+  button.append(dot, subject!.nameOf(neuron), value);
   button.addEventListener("click", () => select(neuron));
   item.append(button);
   return item;
 }
 
 function renderTop(): void {
-  if (!model) return;
+  if (!subject) return;
   const top = [...rates].sort((a, b) => b[1] - a[1]).slice(0, 6);
   ui.top.replaceChildren(...top.map(([neuron, hz]) => neuronButton(neuron, `${hz.toFixed(0)} Hz`)));
+
+  const groups = subject.groups;
+  if (!groups) return;
+  const firing = new Map<number, number>();
+  for (const neuron of rates.keys()) firing.set(groups.of(neuron), (firing.get(groups.of(neuron)) ?? 0) + 1);
+  const busiest = [...firing].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  ui.regions.replaceChildren(
+    ...busiest.map(([group, neurons]) => {
+      const item = document.createElement("li");
+      item.className = "region-row";
+      const amount = document.createElement("span");
+      amount.className = "amount";
+      amount.textContent = `${neurons} firing`;
+      item.append(groups.names[group], amount);
+      return item;
+    }),
+  );
 }
 
 function buildOutputs(): void {
-  if (!model) return;
-  const cards = model.labels.flatMap((label, neuron) => {
-    if (!label) return [];
+  if (!subject) return;
+  const cards = [...subject.labels].map(([neuron, label]) => {
     const card = document.createElement("div");
     card.className = "output-card";
     card.dataset.neuron = String(neuron);
@@ -253,7 +341,7 @@ function buildOutputs(): void {
     const value = document.createElement("span");
     value.className = "value";
     card.append(button, meter, value);
-    return [card];
+    return card;
   });
   ui.outputs.replaceChildren(...cards);
   updateOutputs();
@@ -267,15 +355,42 @@ function updateOutputs(): void {
   }
 }
 
+function neighbourLists(inputs: Edge[], outputs: Edge[]): HTMLElement[] {
+  const list = (title: string, edges: Edge[]) => {
+    const heading = document.createElement("h3");
+    heading.textContent = title;
+    const items = document.createElement("ol");
+    items.className = "neuron-list";
+    items.append(...edges.slice(0, 5).map((e) => neuronButton(e.other, `${e.weight > 0 ? "+" : ""}${e.weight} syn`)));
+    return [heading, items];
+  };
+  return [...list("Strongest inputs", inputs), ...list("Strongest outputs", outputs)];
+}
+
+function flywireLink(id: string): HTMLAnchorElement {
+  const link = document.createElement("a");
+  link.href = `https://codex.flywire.ai/app/cell_details?root_id=${id}`;
+  link.target = "_blank";
+  link.rel = "noreferrer";
+  link.textContent = id;
+  return link;
+}
+
+function renderNeighbours(message: NeighboursMessage): void {
+  document.getElementById("selected-id")?.replaceChildren(flywireLink(message.id));
+  const toEdges = (pairs: [number, number][]) => pairs.map(([other, weight]) => ({ other, weight }));
+  document.getElementById("neighbours")?.replaceChildren(...neighbourLists(toEdges(message.inputs), toEdges(message.outputs)));
+}
+
 function select(neuron: number | null): void {
   selected = neuron;
-  circuitView.setSelected(neuron);
+  stage.setSelected(neuron);
   rasterView.setSelected(neuron);
   traceView.clear();
   connection.send({ type: "watch", neuron });
-
   ui.trace.hidden = false;
-  if (!model || neuron === null) {
+
+  if (!subject || neuron === null) {
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = "Click a neuron, or pick one of the most active.";
@@ -293,30 +408,19 @@ function select(neuron: number | null): void {
     dd.append(value);
     facts.append(dt, dd);
   };
-  const link = document.createElement("a");
-  link.href = `https://codex.flywire.ai/app/cell_details?root_id=${model.ids[neuron]}`;
-  link.target = "_blank";
-  link.rel = "noreferrer";
-  link.textContent = model.ids[neuron];
 
-  fact("Name", model.nameOf(neuron));
-  fact("FlyWire ID", link);
-  fact("Kind", model.kind(neuron));
-  fact("Layer", model.layer[neuron] === 0 ? "sensors" : model.layer[neuron] === model.unreachedLayer ? "other" : `hop ${model.layer[neuron]}`);
+  const known = subject.neighbours(neuron);
+  fact("Name", subject.nameOf(neuron));
+  fact("FlyWire ID", known ? flywireLink(known.id) : "…", "selected-id");
+  for (const [name, value] of subject.facts(neuron)) fact(name, value);
   fact("Rate", "0 Hz", "selected-rate");
-  fact("Inputs", `${model.inputs[neuron].length}`);
-  fact("Outputs", `${model.outputs[neuron].length}`);
 
-  const list = (title: string, edges: { other: number; weight: number }[]) => {
-    const heading = document.createElement("h3");
-    heading.textContent = title;
-    const items = document.createElement("ol");
-    items.className = "neuron-list";
-    items.append(...edges.slice(0, 5).map((e) => neuronButton(e.other, `${e.weight > 0 ? "+" : ""}${e.weight} syn`)));
-    return [heading, items];
-  };
+  const neighbours = document.createElement("div");
+  neighbours.id = "neighbours";
+  if (known) neighbours.append(...neighbourLists(known.inputs, known.outputs));
+  else connection.send({ type: "neighbours", neuron });
 
-  ui.inspector.replaceChildren(facts, ui.trace, ...list("Strongest inputs", model.inputs[neuron]), ...list("Strongest outputs", model.outputs[neuron]));
+  ui.inspector.replaceChildren(facts, ui.trace, neighbours);
   renderSelectedRate();
 }
 
@@ -325,21 +429,31 @@ function renderSelectedRate(): void {
   if (cell && selected !== null) cell.textContent = `${(rates.get(selected) ?? 0).toFixed(0)} Hz`;
 }
 
-ui.circuit.addEventListener("change", () => connection.send({ type: "load", circuit: ui.circuit.value }));
+ui.circuit.addEventListener("change", () => load(ui.circuit.value));
+
+ui.stimulus.addEventListener("change", () => {
+  // Switch off the old stimulus before the button starts meaning the new one.
+  if (stimulating) {
+    for (const s of subject?.stimuli ?? []) if (s.sensory) connection.send({ type: "stimulate", rateHz: 0, neurons: s.sensory });
+    stimulating = false;
+    restartAverage();
+  }
+  renderStimulus();
+});
 
 ui.stimulate.addEventListener("click", () => {
   stimulating = !stimulating;
   restartAverage();
-  connection.send({ type: "stimulate", rateHz: stimulating ? Number(ui.rate.value) : 0 });
+  sendStimulus(stimulating ? Number(ui.rate.value) : 0);
   if (stimulating && !running) connection.send({ type: "play" });
-  renderStimulate();
+  renderStimulus();
 });
 
 ui.rate.addEventListener("input", () => {
   ui.rateOut.textContent = `${ui.rate.value} Hz`;
   if (!stimulating) return;
   restartAverage();
-  connection.send({ type: "stimulate", rateHz: Number(ui.rate.value) });
+  sendStimulus(Number(ui.rate.value));
 });
 
 ui.pin.addEventListener("click", () => {
@@ -353,7 +467,7 @@ ui.unpin.addEventListener("click", () => {
 });
 
 ui.play.addEventListener("click", () => connection.send({ type: running ? "pause" : "play" }));
-ui.step.addEventListener("click", () => connection.send({ type: "step", steps: Math.round(1 / (model?.dtMs ?? 0.1)) }));
+ui.step.addEventListener("click", () => connection.send({ type: "step", steps: Math.round(1 / (subject?.dtMs ?? 0.1)) }));
 ui.reset.addEventListener("click", () => connection.send({ type: "reset" }));
 ui.speed.addEventListener("change", () => connection.send({ type: "speed", value: speedValue() }));
 
@@ -367,12 +481,13 @@ document.addEventListener("keydown", (event) => {
 matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   palette = readPalette();
   circuitView.setPalette(palette);
+  brainView.setPalette(palette);
   rasterView.setPalette(palette);
   traceView.setPalette(palette);
 });
 
 function animate(now: number): void {
-  circuitView.draw(now);
+  stage.draw(now);
   rasterView.draw(step);
   if (selected !== null) traceView.draw();
   requestAnimationFrame(animate);

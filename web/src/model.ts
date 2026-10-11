@@ -1,16 +1,15 @@
 import type { CircuitInfo, CircuitMessage } from "./protocol";
+import type { Edge, Subject, Tone } from "./subject";
 
-export type Edge = { other: number; weight: number };
-
-/** The circuit as the views need it: who connects to whom, and which layer each neuron sits in. */
-export class CircuitModel {
+/** A small circuit: who connects to whom, and which layer each neuron sits in. */
+export class CircuitModel implements Subject {
   readonly name: string;
   readonly info: CircuitInfo;
   readonly dtMs: number;
   readonly count: number;
   readonly ids: string[];
   readonly sensory: boolean[];
-  readonly labels: (string | null)[];
+  readonly labels: Map<number, string>;
   readonly inhibitory: boolean[];
   readonly outputs: Edge[][];
   readonly inputs: Edge[][];
@@ -21,6 +20,13 @@ export class CircuitModel {
   /** Index of the layer holding neurons no excitatory path reaches, if there is one. */
   readonly unreachedLayer: number | null;
 
+  readonly stimuli: Subject["stimuli"];
+  readonly rasterRows: number;
+  readonly rasterDividers: number[];
+  readonly rasterCaption = "one row per neuron, sensors at the top";
+  readonly groups = null;
+  private readonly row: Int32Array;
+
   constructor(message: CircuitMessage) {
     this.name = message.name;
     this.info = message.info;
@@ -28,8 +34,9 @@ export class CircuitModel {
     this.count = message.neurons.length;
     this.ids = message.neurons.map((n) => n.id);
     this.sensory = message.neurons.map((n) => n.sensory);
-    this.labels = message.neurons.map((n) => n.label);
+    this.labels = new Map(message.neurons.flatMap((n, i) => (n.label ? [[i, n.label] as [number, string]] : [])));
     this.edges = message.edges;
+    this.stimuli = [{ name: message.name, info: message.info, sensory: null }];
 
     this.outputs = Array.from({ length: this.count }, () => []);
     this.inputs = Array.from({ length: this.count }, () => []);
@@ -72,14 +79,43 @@ export class CircuitModel {
       if (l < 0) this.layer[i] = last + 1;
       this.layers[this.layer[i]].push(i);
     });
+
+    this.rasterRows = this.count;
+    this.row = new Int32Array(this.count);
+    this.layers.flat().forEach((neuron, position) => (this.row[neuron] = position));
+    this.rasterDividers = [];
+    let rows = 0;
+    for (const layer of this.layers.slice(0, -1)) this.rasterDividers.push((rows += layer.length));
   }
 
   nameOf(neuron: number): string {
-    return this.labels[neuron] ?? `#${neuron}`;
+    return this.labels.get(neuron) ?? `#${neuron}`;
   }
 
-  kind(neuron: number): string {
+  tone(neuron: number): Tone {
+    if (this.labels.has(neuron)) return "output";
     if (this.sensory[neuron]) return "sensory";
     return this.inhibitory[neuron] ? "inhibitory" : "excitatory";
+  }
+
+  layerName(layer: number): string {
+    return layer === 0 ? "sensors" : layer === this.unreachedLayer ? "other" : `hop ${layer}`;
+  }
+
+  facts(neuron: number): [string, string][] {
+    return [
+      ["Kind", this.sensory[neuron] ? "sensory" : this.inhibitory[neuron] ? "inhibitory" : "excitatory"],
+      ["Layer", this.layerName(this.layer[neuron])],
+      ["Inputs", String(this.inputs[neuron].length)],
+      ["Outputs", String(this.outputs[neuron].length)],
+    ];
+  }
+
+  neighbours(neuron: number) {
+    return { id: this.ids[neuron], inputs: this.inputs[neuron], outputs: this.outputs[neuron] };
+  }
+
+  rasterRow(neuron: number): number {
+    return this.row[neuron];
   }
 }

@@ -162,6 +162,9 @@ button.primary[aria-pressed="true"] {
 .output-card .value { font-family: var(--mono); font-variant-numeric: tabular-nums; min-width: 7ch; text-align: right; }
 
 .small { font-size: 12px; }
+.caption { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.region-row { display: flex; gap: 6px; padding: 3px 6px; font-family: var(--mono); font-size: 12px; }
+.region-row .amount { margin-left: auto; color: var(--muted); }
 .compare table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
 .compare th { text-align: right; font-weight: 500; color: var(--muted); padding: 2px 4px; }
 .compare th:first-child { text-align: left; }

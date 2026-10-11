@@ -149,8 +149,7 @@ export class CircuitView {
     model.layers.forEach((layer, index) => {
       if (layer.length === 0) return;
       const xs = layer.map((n) => this.x[n]);
-      const name = index === 0 ? "sensors" : index === model.unreachedLayer ? "other" : `hop ${index}`;
-      c.fillText(name, (Math.min(...xs) + Math.max(...xs)) / 2, 16);
+      c.fillText(model.layerName(index), (Math.min(...xs) + Math.max(...xs)) / 2, 16);
     });
 
     if (this.selected !== null) this.drawSelectedEdges(model, this.selected);
@@ -159,7 +158,7 @@ export class CircuitView {
       const glow = this.flash[i];
       this.flash[i] = glow * decay;
       const colour = neuronColour(this.palette, model, i);
-      const r = this.radius * (model.labels[i] ? 1.5 : 1);
+      const r = this.radius * (model.labels.has(i) ? 1.5 : 1);
 
       if (glow > 0.02) {
         c.globalAlpha = glow * 0.35;
@@ -179,7 +178,6 @@ export class CircuitView {
     c.textAlign = "left";
     c.font = LABEL_FONT;
     model.labels.forEach((label, i) => {
-      if (!label) return;
       c.fillStyle = this.palette.fg;
       c.fillText(label, this.x[i] + this.radius * 1.5 + 5, this.y[i] + 4);
     });

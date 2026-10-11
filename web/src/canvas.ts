@@ -1,3 +1,5 @@
+import type { Subject } from "./subject";
+
 /** Sizes a canvas to its CSS box at device resolution and calls back whenever that changes. */
 export function fitCanvas(canvas: HTMLCanvasElement, onResize: (width: number, height: number) => void): void {
   const apply = () => {
@@ -43,8 +45,6 @@ export function readPalette(): Palette {
   };
 }
 
-export function neuronColour(palette: Palette, model: { sensory: boolean[]; inhibitory: boolean[]; labels: (string | null)[] }, neuron: number): string {
-  if (model.labels[neuron]) return palette.output;
-  if (model.sensory[neuron]) return palette.sensory;
-  return model.inhibitory[neuron] ? palette.inhibitory : palette.excitatory;
+export function neuronColour(palette: Palette, subject: Subject, neuron: number): string {
+  return palette[subject.tone(neuron)];
 }
