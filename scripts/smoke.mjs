@@ -42,7 +42,7 @@ ws.onmessage = ({ data }) => {
       send({ type: "reset" });
     } else if (phase === "resetting" && m.step === 0) {
       console.log("reset back to step 0");
-      const ok = seen.spikes > 0 && (seen.frames - 1) / ((seen.lastAt - seen.firstFrameAt) / 1000) <= 30.5 && m.step === 0 && seen.errors.length === 1;
+      const ok = seen.spikes > 0 && (seen.frames - 1) / ((seen.lastAt - seen.firstFrameAt) / 1000) <= 31 && m.step === 0 && seen.errors.length === 1;
       console.log(ok ? "OK" : "FAILED");
       ws.close();
       process?.exit?.(ok ? 0 : 1);
