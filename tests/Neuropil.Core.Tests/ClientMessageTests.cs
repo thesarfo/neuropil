@@ -67,6 +67,32 @@ public class ClientMessageTests
         Assert.Equal(new Watch(null), Parse("""{"type":"watch","neuron":null}""", Loaded).Command);
     }
 
+    static readonly Circuit Embodied = Loaded with { Sensors = new HashSet<string> { "sugar", "antenna" } };
+
+    [Fact]
+    public void Sense_takes_levels_for_known_sensors()
+    {
+        var command = Assert.IsType<Sense>(Parse("""{"type":"sense","levels":{"sugar":0.6,"antenna":0}}""", Embodied).Command);
+        Assert.Equal(0.6, command.Levels["sugar"]);
+        Assert.Equal(0, command.Levels["antenna"]);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"sense"}""")]
+    [InlineData("""{"type":"sense","levels":{"smell":1}}""")]
+    [InlineData("""{"type":"sense","levels":{"sugar":2}}""")]
+    [InlineData("""{"type":"sense","levels":{"sugar":"lots"}}""")]
+    public void Bad_sense_messages_are_rejected(string json)
+    {
+        Assert.NotNull(Parse(json, Embodied).Error);
+    }
+
+    [Fact]
+    public void Sense_needs_a_body()
+    {
+        Assert.Equal("this circuit has no body", Parse("""{"type":"sense","levels":{"sugar":1}}""", Loaded).Error);
+    }
+
     [Theory]
     [InlineData("not json")]
     [InlineData("""{"type":"watch"}""")]

@@ -24,7 +24,7 @@ public sealed class ClockActor : ReceiveActor
     long _step, _endStep;
     int _outstanding;
     IActorRef _caller = ActorRefs.Nobody;
-    IActorRef? _subscriber;
+    readonly List<IActorRef> _subscribers = [];
     int? _watched;
     double[]? _voltages;
     readonly LifParams _p;
@@ -81,7 +81,7 @@ public sealed class ClockActor : ReceiveActor
             StartEpoch();
         });
         Receive<EpochDone>(OnDone);
-        Receive<Subscribe>(m => _subscriber = m.Subscriber);
+        Receive<Subscribe>(m => _subscribers.Add(m.Subscriber));
         Receive<Stimulate>(OnStimulate);
         Receive<Watch>(OnWatch);
     }
@@ -107,6 +107,11 @@ public sealed class ClockActor : ReceiveActor
         }
     }
 
+    void Publish(EpochSpikes epoch)
+    {
+        foreach (var subscriber in _subscribers) subscriber.Tell(epoch);
+    }
+
     void StartEpoch()
     {
         while (_step < _endStep)
@@ -121,7 +126,7 @@ public sealed class ClockActor : ReceiveActor
             }
             if (_outstanding > 0) return;
             _step = epoch.ToStep;
-            _subscriber?.Tell(new EpochSpikes(epoch.FromStep, epoch.ToStep, []));
+            Publish(new EpochSpikes(epoch.FromStep, epoch.ToStep, []));
         }
 
         _caller.Tell(new RunResult([.. _spikes]));
@@ -139,7 +144,7 @@ public sealed class ClockActor : ReceiveActor
         _step = Math.Min(_step + _epochSteps, _endStep);
         _epochSpikes.Sort();
         _spikes.AddRange(_epochSpikes);
-        _subscriber?.Tell(new EpochSpikes(from, _step, [.. _epochSpikes], _voltages is null ? null : _watched, _voltages));
+        Publish(new EpochSpikes(from, _step, [.. _epochSpikes], _voltages is null ? null : _watched, _voltages));
         _voltages = null;
         _epochSpikes.Clear();
         Array.Copy(_nextActive, _active, _active.Length);

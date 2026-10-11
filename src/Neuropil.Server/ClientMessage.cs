@@ -18,6 +18,7 @@ public sealed record Neighbours(int Neuron);
 ///   {"type":"speed","value":0.05}                        or "max"
 ///   {"type":"watch","neuron":33}                         or null to stop; streams that neuron's voltage
 ///   {"type":"neighbours","neuron":33}                    whole brain only: strongest inputs and outputs
+///   {"type":"sense","levels":{"sugar":0.6}}              embodied fly only: sensor levels from 0 to 1
 /// </summary>
 public static class ClientMessage
 {
@@ -85,6 +86,21 @@ public static class ClientMessage
                     if (!w.TryGetInt32(out int watched) || watched < 0 || watched >= circuit.Brain.NeuronCount)
                         return Fail($"neuron must be null or an index from 0 to {circuit.Brain.NeuronCount - 1}");
                     return (new Watch(watched), null);
+                }
+
+                case "sense":
+                {
+                    if (circuit.Sensors is not { } sensors) return Fail("this circuit has no body");
+                    if (!root.TryGetProperty("levels", out var l) || l.ValueKind != JsonValueKind.Object) return Fail("sense needs a \"levels\" object");
+                    var levels = new Dictionary<string, double>();
+                    foreach (var entry in l.EnumerateObject())
+                    {
+                        if (!sensors.Contains(entry.Name)) return Fail($"unknown sensor \"{entry.Name}\"");
+                        if (entry.Value.ValueKind != JsonValueKind.Number || !entry.Value.TryGetDouble(out double level) || !(level >= 0 && level <= 1))
+                            return Fail("sensor levels must be numbers from 0 to 1");
+                        levels[entry.Name] = level;
+                    }
+                    return (new Sense(levels), null);
                 }
 
                 case "neighbours":

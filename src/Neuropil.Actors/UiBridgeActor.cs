@@ -14,7 +14,8 @@ public sealed record Frame(
     IReadOnlyList<(long Step, int Neuron)> Spikes,
     IReadOnlyList<(int Neuron, double Hz)> Rates,
     bool Truncated,
-    VoltageTrace? Trace = null);
+    VoltageTrace? Trace = null,
+    IReadOnlyList<(string Motor, double Hz)>? Motor = null);
 
 /// <summary>Voltage of the watched neuron at each step from FromStep on.</summary>
 public sealed record VoltageTrace(int Neuron, long FromStep, IReadOnlyList<double> Millivolts);
@@ -43,6 +44,7 @@ public sealed class UiBridgeActor : ReceiveActor, IWithTimers
     readonly List<double> _trace = [];
     int? _watched;
     long _traceFrom;
+    IReadOnlyList<(string Motor, double Hz)>? _motor;
 
     readonly Stopwatch _wall = Stopwatch.StartNew();
     double _nextFrameMs;
@@ -67,12 +69,14 @@ public sealed class UiBridgeActor : ReceiveActor, IWithTimers
             _step = 0;
             _unsent.Clear();
             _trace.Clear();
+            _motor = null;
             _window.Clear();
             Array.Clear(_windowCounts);
             _truncated = false;
             _dirty = true;
         });
         Receive<Watch>(m => { _watched = m.Neuron; _trace.Clear(); });
+        Receive<MotorRates>(m => { _motor = m.Rates; _dirty = true; });
         Receive<Flush>(_ => OnFlush());
     }
 
@@ -119,7 +123,7 @@ public sealed class UiBridgeActor : ReceiveActor, IWithTimers
             if (_windowCounts[i] > 0) rates.Add((i, _windowCounts[i] * 1000 / RateWindowMs));
 
         var trace = _watched is { } w && _trace.Count > 0 ? new VoltageTrace(w, _traceFrom, [.. _trace]) : null;
-        _frames.TryWrite(new Frame(_step, _step * _p.Dt, _running, _speed, [.. _unsent], rates, _truncated, trace));
+        _frames.TryWrite(new Frame(_step, _step * _p.Dt, _running, _speed, [.. _unsent], rates, _truncated, trace, _motor));
         _trace.Clear();
         _unsent.Clear();
         _truncated = false;

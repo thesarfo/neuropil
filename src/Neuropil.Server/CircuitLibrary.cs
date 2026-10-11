@@ -9,7 +9,8 @@ public sealed record Circuit(
     Brain Brain,
     IReadOnlyList<int> Sensory,
     IReadOnlyDictionary<int, string>? Labels = null,
-    CircuitInfo? Info = null);
+    CircuitInfo? Info = null,
+    IReadOnlySet<string>? Sensors = null);
 
 /// <summary>Circuits cut in advance with `neuropil circuit`; the preset of the same name marks the sensory neurons.</summary>
 public sealed class CircuitLibrary

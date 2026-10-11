@@ -21,7 +21,7 @@ public sealed record PlaybackChanged(bool Running, double? Speed);
 /// </summary>
 public sealed class SessionActor : ReceiveActor, IWithTimers
 {
-    public sealed record Setup(Brain Brain, LifParams P, ulong Seed, ChannelWriter<Frame> Frames, int[]? RegionOf = null);
+    public sealed record Setup(Brain Brain, LifParams P, ulong Seed, ChannelWriter<Frame> Frames, int[]? RegionOf = null, BodyPlan? Body = null);
 
     sealed record Continue;
 
@@ -31,6 +31,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
 
     readonly Setup _s;
     readonly IActorRef _bridge;
+    readonly IActorRef? _body;
     readonly Dictionary<int, double> _stimulus = [];
     readonly Stopwatch _wall = Stopwatch.StartNew();
 
@@ -52,6 +53,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
     {
         _s = s;
         _bridge = Context.ActorOf(Props.Create(() => new UiBridgeActor(s.Brain.NeuronCount, s.P, s.Frames)), "bridge");
+        if (s.Body is { } plan) _body = Context.ActorOf(Props.Create(() => new BodyBridgeActor(plan, s.P, _bridge)), "body");
         StartClock();
         Announce();
 
@@ -71,6 +73,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
             _clock.Tell(m);
             _bridge.Tell(m);
         });
+        Receive<Sense>(m => _body?.Tell(m));
         Receive<Continue>(_ => Advance());
         Receive<RunResult>(_ =>
         {
@@ -85,6 +88,7 @@ public sealed class SessionActor : ReceiveActor, IWithTimers
         var setup = new ClockActor.Setup(_s.Brain, _s.P, _s.Seed, 0, [], null, [], _s.RegionOf);
         _clock = Context.ActorOf(Props.Create(() => new ClockActor(setup)), $"clock-{_generation++}");
         _clock.Tell(new Subscribe(_bridge));
+        _body?.Tell(new AttachClock(_clock));
         foreach (var group in _stimulus.GroupBy(kv => kv.Value, kv => kv.Key))
             _clock.Tell(new Stimulate([.. group], group.Key));
         if (_watched is not null) _clock.Tell(new Watch(_watched));

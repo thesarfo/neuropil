@@ -1,0 +1,11 @@
+{
+  "sensors": {
+    "sugar": { "preset": "sugarR", "maxRateHz": 150 },
+    "water": { "preset": "waterR", "maxRateHz": 150 },
+    "antenna": { "preset": "antenna", "maxRateHz": 150 }
+  },
+  "motors": {
+    "proboscis": ["MN9"],
+    "groom": ["aDN1", "aDN2", "aBN1"]
+  }
+}

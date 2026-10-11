@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Neuropil.Actors;
 using Neuropil.Core;
 
 namespace Neuropil.Server;
@@ -9,6 +10,7 @@ public sealed record Stimulus(string Name, CircuitInfo Info, IReadOnlyList<int> 
 public sealed class Atlas
 {
     public const string Name = "brain";
+    public const string FlyName = "fly";
     const int MaxRegionSize = 500;
 
     public required Brain Brain { get; init; }
@@ -17,6 +19,9 @@ public sealed class Atlas
     public required int[] UnitOf { get; init; }
     public required IReadOnlyList<Stimulus> Stimuli { get; init; }
     public required IReadOnlyDictionary<int, string> Labels { get; init; }
+
+    /// <summary>Sensors and motors for the embodied fly; null when presets/body.json is missing.</summary>
+    public BodyPlan? Body { get; init; }
 
     public int Actors => UnitOf.Max() + 1;
 
@@ -57,7 +62,36 @@ public sealed class Atlas
             UnitOf = meta.Partition(MaxRegionSize),
             Stimuli = stimuli,
             Labels = labels,
+            Body = ReadBody(Path.Combine(presetsDir, "body.json"), stimuli, labels),
         };
+    }
+
+    sealed record SensorFile(string Preset, double MaxRateHz);
+
+    sealed record BodyFile(Dictionary<string, SensorFile> Sensors, Dictionary<string, string[]> Motors);
+
+    static BodyPlan? ReadBody(string path, List<Stimulus> stimuli, Dictionary<int, string> labels)
+    {
+        if (!File.Exists(path)) return null;
+        var file = JsonSerializer.Deserialize<BodyFile>(File.ReadAllText(path), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        var neuronOf = labels.ToDictionary(kv => kv.Value, kv => kv.Key);
+
+        var sensors = new Dictionary<string, (IReadOnlyList<int>, double)>();
+        foreach (var (name, sensor) in file.Sensors)
+        {
+            var stimulus = stimuli.FirstOrDefault(s => s.Name == sensor.Preset)
+                ?? throw new InvalidDataException($"{path}: sensor \"{name}\" names unknown preset \"{sensor.Preset}\"");
+            sensors[name] = (stimulus.Sensory, sensor.MaxRateHz);
+        }
+
+        var motors = new Dictionary<string, IReadOnlyList<int>>();
+        foreach (var (name, neurons) in file.Motors)
+        {
+            motors[name] = [.. neurons.Select(label => neuronOf.TryGetValue(label, out int neuron)
+                ? neuron
+                : throw new InvalidDataException($"{path}: motor \"{name}\" names unknown neuron \"{label}\""))];
+        }
+        return new BodyPlan(sensors, motors);
     }
 
     /// <summary>A neuron's strongest connections in each direction, as (neuron, synapses) pairs.</summary>
