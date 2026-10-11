@@ -1,4 +1,4 @@
-import { fitCanvas, neuronColour, type Palette } from "./canvas";
+import { CANVAS_SANS, fitCanvas, neuronColour, type Palette } from "./canvas";
 import type { BrainModel } from "./brainModel";
 
 const FLASH_HALF_LIFE_MS = 220;
@@ -149,7 +149,7 @@ export class BrainView {
     }
     c.globalAlpha = 1;
 
-    c.font = "600 12px system-ui, -apple-system, 'Segoe UI', sans-serif";
+    c.font = `600 12px ${CANVAS_SANS}`;
     c.textAlign = "left";
     for (const [neuron, label] of model.labels) {
       c.strokeStyle = this.palette.output;

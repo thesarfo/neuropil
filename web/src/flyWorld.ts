@@ -160,6 +160,9 @@ export class FlyWorld {
       c.beginPath();
       c.arc(drop.x, drop.y, this.dropRadius(drop), 0, Math.PI * 2);
       c.fill();
+      c.strokeStyle = p.fg;
+      c.lineWidth = 1;
+      c.stroke();
     }
     c.globalAlpha = 1;
 
@@ -215,7 +218,7 @@ export class FlyWorld {
     c.arc(0.27 * L, 0, 0.11 * L, 0, Math.PI * 2);
     c.fill();
 
-    c.fillStyle = p.output;
+    c.fillStyle = p.excitatory;
     for (const side of [-1, 1]) {
       c.beginPath();
       c.ellipse(0.28 * L, side * 0.085 * L, 0.055 * L, 0.04 * L, side * 0.5, 0, Math.PI * 2);
@@ -224,7 +227,7 @@ export class FlyWorld {
 
     // Antennae, lit while they are being touched.
     const touched = this.timeMs < this.tapUntilMs;
-    c.strokeStyle = touched ? p.sensory : p.fg;
+    c.strokeStyle = touched ? p.inhibitory : p.fg;
     c.lineWidth = Math.max(1.5, L * (touched ? 0.04 : 0.025));
     for (const side of [-1, 1]) {
       c.beginPath();

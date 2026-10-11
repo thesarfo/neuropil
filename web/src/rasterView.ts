@@ -1,4 +1,4 @@
-import { fitCanvas, neuronColour, type Palette } from "./canvas";
+import { CANVAS_MONO, fitCanvas, neuronColour, type Palette } from "./canvas";
 import type { Subject } from "./subject";
 
 const WINDOW_MS = 200;
@@ -84,7 +84,7 @@ export class RasterView {
     }
 
     c.fillStyle = this.palette.muted;
-    c.font = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    c.font = `11px ${CANVAS_MONO}`;
     c.textAlign = "left";
     c.fillText(`${Math.max(0, from * subject.dtMs).toFixed(0)} ms`, left, this.height - 4);
     c.textAlign = "right";

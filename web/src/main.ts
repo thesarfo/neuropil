@@ -1,3 +1,8 @@
+import "@fontsource/ibm-plex-sans/latin-400.css";
+import "@fontsource/ibm-plex-sans/latin-500.css";
+import "@fontsource/ibm-plex-sans/latin-600.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
 import { BrainModel } from "./brainModel";
 import { BrainView } from "./brainView";
 import { neuronColour, readPalette } from "./canvas";
@@ -11,6 +16,18 @@ import type { Edge, Subject } from "./subject";
 import { TraceView } from "./traceView";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+// A stored choice wins over the system's theme. Applied before any colours are read.
+const darkQuery = matchMedia("(prefers-color-scheme: dark)");
+function storedTheme(): string | null {
+  try {
+    return localStorage.getItem("theme");
+  } catch {
+    return null;
+  }
+}
+if (storedTheme()) document.documentElement.dataset.theme = storedTheme()!;
+const isDark = () => (document.documentElement.dataset.theme ?? (darkQuery.matches ? "dark" : "light")) === "dark";
 
 const ui = {
   status: $("status"),
@@ -430,7 +447,7 @@ function select(neuron: number | null): void {
 
   if (!subject || neuron === null) {
     const hint = document.createElement("p");
-    hint.className = "hint";
+    hint.className = "note";
     hint.textContent = "Click a neuron, or pick one of the most active.";
     ui.inspector.replaceChildren(hint);
     return;
@@ -529,14 +546,27 @@ document.addEventListener("keydown", (event) => {
   ui.play.click();
 });
 
-matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+function applyTheme(): void {
   palette = readPalette();
   circuitView.setPalette(palette);
   brainView.setPalette(palette);
   world.setPalette(palette);
   rasterView.setPalette(palette);
   traceView.setPalette(palette);
+  $("theme").textContent = isDark() ? "Light" : "Dark";
+}
+darkQuery.addEventListener("change", applyTheme);
+$("theme").addEventListener("click", () => {
+  const next = isDark() ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try {
+    localStorage.setItem("theme", next);
+  } catch {
+    // Private windows may refuse storage; the choice then lasts for this visit.
+  }
+  applyTheme();
 });
+applyTheme();
 
 function animate(now: number): void {
   stage.draw(now);

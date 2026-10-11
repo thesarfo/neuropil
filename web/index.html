@@ -3,30 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="light dark" />
     <title>Neuropil</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <header class="bar">
       <h1>Neuropil</h1>
-      <label class="circuit-pick">
+      <label class="subject-pick">
         <span class="visually-hidden">Circuit</span>
         <select id="circuit" disabled></select>
       </label>
       <p id="status" class="status" role="status">Connecting…</p>
+      <button id="theme" class="theme" type="button">Dark</button>
     </header>
 
     <main class="layout">
       <div class="side">
-        <section class="controls card" aria-label="Experiment">
-          <p id="about" class="hint"></p>
+        <section class="panel" aria-labelledby="experiment-heading">
+          <h2 id="experiment-heading">Experiment</h2>
+          <p id="about" class="note"></p>
           <div class="row">
             <label class="stimulus-pick" hidden>
-            <span class="visually-hidden">Stimulus</span>
-            <select id="stimulus"></select>
-          </label>
-          <button id="stimulate" class="primary" aria-pressed="false" disabled>Stimulate</button>
+              <span class="visually-hidden">Stimulus</span>
+              <select id="stimulus"></select>
+            </label>
+            <button id="stimulate" class="primary" aria-pressed="false" disabled>Stimulate</button>
             <label class="rate">
               <span>Rate</span>
               <input id="rate" type="range" min="10" max="300" step="10" value="150" disabled />
@@ -34,18 +36,20 @@
             </label>
           </div>
           <div class="row" id="fly-tools" hidden>
-          <fieldset class="drop-pick">
-            <legend class="visually-hidden">Click the arena to drop</legend>
-            <label><input type="radio" name="drop" value="sugar" checked /> Sugar</label>
-            <label><input type="radio" name="drop" value="water" /> Water</label>
-          </fieldset>
-          <button id="tap">Tap antenna</button>
-          <button id="clear-drops">Clear drops</button>
-        </div>
-        <div class="row transport">
-            <button id="play" disabled>Play</button>
-            <button id="step" disabled title="Advance 1 ms of simulated time">Step 1 ms</button>
-            <button id="reset" disabled>Reset</button>
+            <fieldset class="drop-pick">
+              <legend class="visually-hidden">Click the arena to drop</legend>
+              <label><input type="radio" name="drop" value="sugar" checked /> Sugar</label>
+              <label><input type="radio" name="drop" value="water" /> Water</label>
+            </fieldset>
+            <button id="tap">Tap antenna</button>
+            <button id="clear-drops">Clear drops</button>
+          </div>
+          <div class="row transport">
+            <div class="segmented">
+              <button id="play" disabled>Play</button>
+              <button id="step" disabled title="Advance 1 ms of simulated time">Step 1 ms</button>
+              <button id="reset" disabled>Reset</button>
+            </div>
             <label class="speed">
               <span class="visually-hidden">Speed</span>
               <select id="speed" disabled>
@@ -57,6 +61,10 @@
               </select>
             </label>
           </div>
+        </section>
+
+        <section class="panel" aria-labelledby="readout-heading">
+          <h2 id="readout-heading">Readout</h2>
           <dl class="clock">
             <div><dt>Simulated time</dt><dd id="clock">0.0 ms</dd></div>
             <div><dt>Neurons firing</dt><dd id="active">0</dd></div>
@@ -66,7 +74,7 @@
             <div class="row">
               <button id="pin" disabled title="Keep these firing rates to compare against a later run">Pin this run</button>
               <button id="unpin" hidden>Clear</button>
-              <span id="window" class="hint small"></span>
+              <span id="window" class="note"></span>
             </div>
             <table id="compare" hidden>
               <caption class="visually-hidden">Average firing rates: pinned run against the current run</caption>
@@ -78,10 +86,10 @@
           </div>
         </section>
 
-        <section class="inspector card" aria-label="Neuron inspector">
-          <h2>Neuron</h2>
+        <section class="panel inspector" aria-labelledby="neuron-heading">
+          <h2 id="neuron-heading">Neuron</h2>
           <div id="inspector-body">
-            <p class="hint">Click a neuron, or pick one of the most active.</p>
+            <p class="note">Click a neuron, or pick one of the most active.</p>
             <canvas id="trace-view" role="img" aria-label="Voltage of the selected neuron over the last 100 ms." hidden></canvas>
           </div>
           <h3>Most active</h3>
@@ -90,26 +98,26 @@
           <ol id="regions" class="neuron-list" hidden></ol>
         </section>
       </div>
-      <section class="stage card" aria-label="Circuit">
+
+      <section class="stage" aria-label="Circuit">
         <div class="views">
-        <canvas id="fly-view" role="img" aria-label="A fly seen from above in an arena. Click to drop sugar or water; click its head or use Tap antenna to touch an antenna. It extends its proboscis to feed and rubs its antennae with its front legs when the brain says so." hidden></canvas>
-        <canvas id="circuit-view" role="img" aria-label="Circuit diagram. Neurons are arranged in columns from sensory neurons on the left; each lights up when it fires. Use the most active list to pick a neuron without a pointer."></canvas>
-        <canvas id="brain-view" role="img" aria-label="The whole brain seen from the front, one dot per neuron at its real position. Firing neurons are brighter. Use the most active list to pick a neuron without a pointer." hidden></canvas>
+          <canvas id="fly-view" role="img" aria-label="A fly seen from above in an arena. Click to drop sugar or water; click its head or use Tap antenna to touch an antenna. It extends its proboscis to feed and rubs its antennae with its front legs when the brain says so." hidden></canvas>
+          <canvas id="circuit-view" role="img" aria-label="Circuit diagram. Neurons are arranged in columns from sensory neurons on the left; each lights up when it fires. Use the most active list to pick a neuron without a pointer."></canvas>
+          <canvas id="brain-view" role="img" aria-label="The whole brain seen from the front, one dot per neuron at its real position. Firing neurons are brighter. Use the most active list to pick a neuron without a pointer." hidden></canvas>
         </div>
         <p id="empty" class="empty" hidden></p>
         <ul class="legend" aria-label="Legend">
-          <li><i class="dot sensory"></i>sensory</li>
-          <li><i class="dot excitatory"></i>excitatory</li>
-          <li><i class="dot inhibitory"></i>inhibitory</li>
-          <li><i class="dot output"></i>motor output</li>
+          <li><i class="dot sensory"></i>Sensory</li>
+          <li><i class="dot excitatory"></i>Excitatory</li>
+          <li><i class="dot inhibitory"></i>Inhibitory</li>
+          <li><i class="dot output"></i>Motor output</li>
         </ul>
       </section>
 
-      <section class="raster card" aria-label="Spike raster">
-        <h2>Spikes, last 200 ms <span id="raster-caption" class="caption"></span></h2>
-        <canvas id="raster-view" role="img" aria-label="Spike raster: one row per neuron from sensory at the top, one mark per spike."></canvas>
+      <section class="raster" aria-labelledby="raster-heading">
+        <h2 id="raster-heading">Spikes, last 200 ms <span id="raster-caption" class="caption"></span></h2>
+        <canvas id="raster-view" role="img" aria-label="Spike raster: one mark per spike, scrolling with simulated time."></canvas>
       </section>
-
     </main>
 
     <script type="module" src="/src/main.ts"></script>

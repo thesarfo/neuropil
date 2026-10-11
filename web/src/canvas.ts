@@ -14,6 +14,10 @@ export function fitCanvas(canvas: HTMLCanvasElement, onResize: (width: number, h
   apply();
 }
 
+/** Fonts for text drawn on a canvas, which can't use the page's CSS variables. */
+export const CANVAS_SANS = '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif';
+export const CANVAS_MONO = '"IBM Plex Mono", ui-monospace, Menlo, monospace';
+
 export type Palette = {
   bg: string;
   surface: string;

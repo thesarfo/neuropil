@@ -1,4 +1,4 @@
-import { fitCanvas, type Palette } from "./canvas";
+import { CANVAS_MONO, fitCanvas, type Palette } from "./canvas";
 
 const WINDOW_MS = 100;
 const REST_MV = -52;
@@ -51,7 +51,7 @@ export class TraceView {
     const high = THRESHOLD_MV + 3;
     const y = (mv: number) => this.height - 4 - ((Math.min(high, Math.max(low, mv)) - low) / (high - low)) * (this.height - 8);
 
-    c.font = "10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    c.font = `10px ${CANVAS_MONO}`;
     c.lineWidth = 1;
     for (const [mv, name] of [[THRESHOLD_MV, "threshold"], [REST_MV, "rest"]] as const) {
       c.strokeStyle = this.palette.rule;

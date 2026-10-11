@@ -1,10 +1,10 @@
-import { fitCanvas, neuronColour, type Palette } from "./canvas";
+import { CANVAS_SANS, fitCanvas, neuronColour, type Palette } from "./canvas";
 import type { CircuitModel } from "./model";
 
 const FLASH_HALF_LIFE_MS = 180;
 const STRONG_EDGES = 1400;
-const MONO_FONT = "11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-const LABEL_FONT = "600 12px system-ui, -apple-system, 'Segoe UI', sans-serif";
+const MONO_FONT = `11px ${CANVAS_SANS}`;
+const LABEL_FONT = `600 12px ${CANVAS_SANS}`;
 
 /** Neurons in columns from sensors to outputs. A neuron lights up when it spikes and fades. */
 export class CircuitView {
