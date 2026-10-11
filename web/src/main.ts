@@ -7,6 +7,7 @@ import { BrainModel } from "./brainModel";
 import { BrainView } from "./brainView";
 import { neuronColour, readPalette } from "./canvas";
 import { CircuitView } from "./circuitView";
+import { FlyView } from "./flyView";
 import { FlyWorld, type DropKind } from "./flyWorld";
 import { CircuitModel } from "./model";
 import type { BrainMessage, BrainMeta, FrameMessage, NeighboursMessage, ServerMessage } from "./protocol";
@@ -91,10 +92,18 @@ const traceView = new TraceView(ui.trace, palette);
 let stage: CircuitView | BrainView = circuitView;
 
 // The embodied fly: its world, and what it last told the brain it could feel.
-const world = new FlyWorld(ui.flyCanvas, palette);
+const world = new FlyWorld();
+const flyView = new FlyView(ui.flyCanvas, palette, world, (x, y) => {
+  world.click(x, y);
+  sendSenses();
+  if (!running) connection.send({ type: "play" });
+});
 let embodied = false;
 let lastTimeMs = 0;
 let sentSenses = "";
+
+// For poking at the fly, and recording it, from the browser console.
+(window as unknown as { neuropil: unknown }).neuropil = { world, flyView, brainView };
 
 const connection = new Connection(onMessage, onConnectionState);
 
@@ -280,7 +289,9 @@ function sendSenses(): void {
 function renderStimulus(): void {
   const info = stimulus()?.info;
   ui.about.textContent = embodied
-    ? "Click the arena to drop food, or tap an antenna. Feeding and grooming come from the simulated brain. Walking is hand-written, because the connectome stops at the neck."
+    ? flyView.supported
+      ? "Click the ground to drop food, or tap an antenna. Drag to look around. Feeding and grooming come from the simulated brain. Walking is hand-written, because the connectome stops at the neck."
+      : "This browser can't draw in 3D, so the fly isn't shown. The brain on the right still responds to Tap antenna."
     : (info?.about ?? "");
   ui.stimulate.setAttribute("aria-pressed", String(stimulating));
   ui.stimulate.textContent = (stimulating ? info?.stop : info?.start) ?? "Stimulate";
@@ -565,14 +576,15 @@ ui.clearDrops.addEventListener("click", () => world.clearDrops());
 for (const radio of document.querySelectorAll<HTMLInputElement>("input[name=drop]")) {
   radio.addEventListener("change", () => (world.tool = radio.value as DropKind));
 }
-ui.flyCanvas.addEventListener("click", () => {
-  sendSenses();
-  if (!running) connection.send({ type: "play" });
-});
-
 ui.play.addEventListener("click", () => connection.send({ type: running ? "pause" : "play" }));
 ui.step.addEventListener("click", () => connection.send({ type: "step", steps: Math.round(1 / (subject?.dtMs ?? 0.1)) }));
-ui.reset.addEventListener("click", () => connection.send({ type: "reset" }));
+ui.reset.addEventListener("click", () => {
+  connection.send({ type: "reset" });
+  // The server only reports a rewind if the clock had moved, so clear the arena here too.
+  world.reset();
+  lastTimeMs = 0;
+  sentSenses = "";
+});
 ui.speed.addEventListener("change", () => connection.send({ type: "speed", value: speedValue() }));
 
 document.addEventListener("keydown", (event) => {
@@ -586,7 +598,7 @@ function applyTheme(): void {
   palette = readPalette();
   circuitView.setPalette(palette);
   brainView.setPalette(palette);
-  world.setPalette(palette);
+  flyView.setPalette(palette);
   rasterView.setPalette(palette);
   traceView.setPalette(palette);
   $("theme").textContent = isDark() ? "Light" : "Dark";
@@ -606,7 +618,7 @@ applyTheme();
 
 function animate(now: number): void {
   stage.draw(now);
-  if (embodied) world.draw();
+  if (embodied) flyView.render();
   rasterView.draw(step);
   if (selected !== null) traceView.draw();
   requestAnimationFrame(animate);

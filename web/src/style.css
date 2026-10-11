@@ -247,7 +247,8 @@ button.primary[aria-pressed="true"] {
 }
 .views { flex: 1; min-height: 0; display: flex; }
 .views canvas { flex: 1; min-width: 0; height: 100%; cursor: crosshair; }
-#fly-view { border-right: 1px solid var(--rule); cursor: cell; }
+#fly-view { border-right: 1px solid var(--rule); cursor: grab; }
+#fly-view:active { cursor: grabbing; }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: var(--muted); white-space: pre-line; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 7px 12px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--rule); }
