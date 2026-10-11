@@ -16,6 +16,8 @@ export type CircuitMessage = {
 export type BrainMessage = {
   type: "brain";
   name: string;
+  /** Present for the embodied fly: the sensors it accepts and the motor groups it reports. */
+  body: { sensors: string[]; motors: string[]; periodMs: number } | null;
   dtMs: number;
   neurons: number;
   actors: number;
@@ -57,10 +59,12 @@ export type FrameMessage = {
   rates: [neuron: number, hz: number][];
   truncated: boolean;
   trace: { neuron: number; fromStep: number; mv: number[] } | null;
+  /** Firing rate per motor group over the last 50 ms; embodied fly only. */
+  motor: Record<string, number> | null;
 };
 
 export type ServerMessage =
-  | { type: "hello"; circuits: CircuitSummary[]; brain: { name: string; neurons: number; edges: number } | null }
+  | { type: "hello"; circuits: CircuitSummary[]; brain: { name: string; neurons: number; edges: number; fly: string | null } | null }
   | CircuitMessage
   | BrainMessage
   | NeighboursMessage
@@ -76,4 +80,5 @@ export type ClientMessage =
   | { type: "step"; steps: number }
   | { type: "speed"; value: number | "max" }
   | { type: "watch"; neuron: number | null }
-  | { type: "neighbours"; neuron: number };
+  | { type: "neighbours"; neuron: number }
+  | { type: "sense"; levels: Record<string, number> };

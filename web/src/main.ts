@@ -2,6 +2,7 @@ import { BrainModel } from "./brainModel";
 import { BrainView } from "./brainView";
 import { neuronColour, readPalette } from "./canvas";
 import { CircuitView } from "./circuitView";
+import { FlyWorld, type DropKind } from "./flyWorld";
 import { CircuitModel } from "./model";
 import type { BrainMessage, BrainMeta, FrameMessage, NeighboursMessage, ServerMessage } from "./protocol";
 import { RasterView } from "./rasterView";
@@ -34,6 +35,10 @@ const ui = {
   pinnedName: $("pinned-name"),
   circuitCanvas: $<HTMLCanvasElement>("circuit-view"),
   brainCanvas: $<HTMLCanvasElement>("brain-view"),
+  flyCanvas: $<HTMLCanvasElement>("fly-view"),
+  flyTools: $("fly-tools"),
+  tap: $<HTMLButtonElement>("tap"),
+  clearDrops: $<HTMLButtonElement>("clear-drops"),
   rasterCaption: $("raster-caption"),
   inspector: $("inspector-body"),
   trace: $<HTMLCanvasElement>("trace-view"),
@@ -64,6 +69,12 @@ const rasterView = new RasterView($<HTMLCanvasElement>("raster-view"), palette);
 const traceView = new TraceView(ui.trace, palette);
 let stage: CircuitView | BrainView = circuitView;
 
+// The embodied fly: its world, and what it last told the brain it could feel.
+const world = new FlyWorld(ui.flyCanvas, palette);
+let embodied = false;
+let lastTimeMs = 0;
+let sentSenses = "";
+
 const connection = new Connection(onMessage, onConnectionState);
 
 function onConnectionState(state: ConnectionState): void {
@@ -80,6 +91,7 @@ function onMessage(message: ServerMessage): void {
     case "hello": {
       const options = message.circuits.map((c) => new Option(`${c.title} (${c.neurons.toLocaleString()} neurons)`, c.name));
       if (message.brain) options.push(new Option(`Whole brain (${message.brain.neurons.toLocaleString()} neurons)`, message.brain.name));
+      if (message.brain?.fly) options.push(new Option("Embodied fly (whole brain)", message.brain.fly));
       ui.circuit.replaceChildren(...options);
       ui.status.textContent = "Connected";
       if (options.length === 0) {
@@ -127,13 +139,20 @@ async function showBrain(message: BrainMessage): Promise<void> {
   brainMeta ??= fetch("/api/brain/meta").then((response) => response.json() as Promise<BrainMeta>);
   const model = new BrainModel(message, await brainMeta);
   brainView.setModel(model);
-  show(model, brainView, `${model.count.toLocaleString()} neurons in ${model.actors} region actors`);
+  show(model, brainView, `${model.count.toLocaleString()} neurons in ${model.actors} region actors`, message.body !== null);
 }
 
 /** Switches the page to a newly loaded subject. The server session starts paused and unstimulated. */
-function show(next: Subject, view: CircuitView | BrainView, status: string): void {
+function show(next: Subject, view: CircuitView | BrainView, status: string, withBody = false): void {
   subject = next;
   stage = view;
+  embodied = withBody;
+  ui.flyCanvas.hidden = ui.flyTools.hidden = !withBody;
+  ui.stimulate.parentElement!.hidden = withBody;
+  world.reset();
+  lastTimeMs = 0;
+  sentSenses = "";
+  if (withBody) ui.speed.value = "0.2";
   ui.circuitCanvas.hidden = view !== circuitView;
   ui.brainCanvas.hidden = view !== brainView;
   ui.circuit.value = next.name;
@@ -150,7 +169,7 @@ function show(next: Subject, view: CircuitView | BrainView, status: string): voi
   restartAverage();
 
   ui.stimulus.replaceChildren(...next.stimuli.map((s) => new Option(s.info.title, s.name)));
-  ui.stimulus.parentElement!.hidden = next.stimuli.length < 2;
+  ui.stimulus.parentElement!.hidden = next.stimuli.length < 2 || withBody;
   ui.rasterCaption.textContent = `· ${next.rasterCaption}`;
   ui.regionsHeading.hidden = ui.regions.hidden = next.groups === null;
 
@@ -173,6 +192,9 @@ function onFrame(frame: FrameMessage): void {
     traceView.clear();
     step = frame.step;
     restartAverage();
+    world.reset();
+    lastTimeMs = 0;
+    sentSenses = "";
   }
   step = frame.step;
   running = frame.running;
@@ -185,6 +207,12 @@ function onFrame(frame: FrameMessage): void {
   rates = new Map(frame.rates);
   brainView.setRates(rates);
   if (frame.trace && frame.trace.neuron === selected) traceView.add(frame.trace.fromStep, frame.trace.mv);
+
+  if (embodied) {
+    world.advance(frame.timeMs - lastTimeMs, frame.motor ?? {});
+    lastTimeMs = frame.timeMs;
+    sendSenses();
+  }
 
   ui.clock.textContent = `${frame.timeMs.toFixed(1)} ms`;
   ui.active.textContent = String(rates.size);
@@ -218,9 +246,19 @@ function stimulus() {
   return subject?.stimuli.find((s) => s.name === ui.stimulus.value) ?? subject?.stimuli[0];
 }
 
+function sendSenses(): void {
+  const levels = world.sense();
+  const key = JSON.stringify(levels);
+  if (key === sentSenses) return;
+  sentSenses = key;
+  connection.send({ type: "sense", levels });
+}
+
 function renderStimulus(): void {
   const info = stimulus()?.info;
-  ui.about.textContent = info?.about ?? "";
+  ui.about.textContent = embodied
+    ? "Click the arena to drop food, or tap an antenna. Feeding and grooming come from the simulated brain. Walking is hand-written, because the connectome stops at the neck."
+    : (info?.about ?? "");
   ui.stimulate.setAttribute("aria-pressed", String(stimulating));
   ui.stimulate.textContent = (stimulating ? info?.stop : info?.start) ?? "Stimulate";
 }
@@ -466,6 +504,19 @@ ui.unpin.addEventListener("click", () => {
   renderCompare();
 });
 
+ui.tap.addEventListener("click", () => {
+  world.tapAntenna();
+  if (!running) connection.send({ type: "play" });
+});
+ui.clearDrops.addEventListener("click", () => world.clearDrops());
+for (const radio of document.querySelectorAll<HTMLInputElement>("input[name=drop]")) {
+  radio.addEventListener("change", () => (world.tool = radio.value as DropKind));
+}
+ui.flyCanvas.addEventListener("click", () => {
+  sendSenses();
+  if (!running) connection.send({ type: "play" });
+});
+
 ui.play.addEventListener("click", () => connection.send({ type: running ? "pause" : "play" }));
 ui.step.addEventListener("click", () => connection.send({ type: "step", steps: Math.round(1 / (subject?.dtMs ?? 0.1)) }));
 ui.reset.addEventListener("click", () => connection.send({ type: "reset" }));
@@ -482,12 +533,14 @@ matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
   palette = readPalette();
   circuitView.setPalette(palette);
   brainView.setPalette(palette);
+  world.setPalette(palette);
   rasterView.setPalette(palette);
   traceView.setPalette(palette);
 });
 
 function animate(now: number): void {
   stage.draw(now);
+  if (embodied) world.draw();
   rasterView.draw(step);
   if (selected !== null) traceView.draw();
   requestAnimationFrame(animate);
