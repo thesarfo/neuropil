@@ -9,10 +9,12 @@ const string Usage = """
       neuropil run     <brain.bin> <preset.txt> [--trials 30] [--ms 1000] [--rate 150] [--seed 1] [--out rates.csv]
       neuropil trace   <brain.bin> <preset.txt> [--ms 100] [--rate 150] [--seed 1] [--out spikes.csv]
       neuropil circuit <brain.bin> <preset.txt> [--size 500] [--out circuit.bin]
-      neuropil compare <brain.bin> <preset.txt> [--ms 1000] [--rate 150] [--seed 1] [--trial 0]
+      neuropil compare <brain.bin> <preset.txt> [--ms 1000] [--rate 150] [--seed 1] [--trial 0] [--regions N]
+      neuropil bench   <brain.bin> <preset.txt> [--ms 1000] [--regions 8,32,128] [--neurons true]
 
     circuit keeps the preset's neurons plus the most active neurons of a one-second array run.
-    compare runs array mode and one-actor-per-neuron mode and checks they spike identically.
+    compare runs array mode and actor mode and checks they spike identically. Actor mode is one
+    actor per neuron, or with --regions N, N region actors of equal size.
     """;
 
 if (args.Length < 2 || (args[0] != "info" && args.Length < 3))
@@ -98,16 +100,53 @@ switch (args[0])
         var arrayTime = clock.Elapsed;
 
         clock.Restart();
-        await using var actors = new ActorSimulator(brain, stimulated, seed: seed, trial: trial, rateHz: rate);
+        int regions = (int)Double("regions", 0);
+        int[]? regionOf = regions > 0 ? [.. Enumerable.Range(0, brain.NeuronCount).Select(i => (int)((long)i * regions / brain.NeuronCount))] : null;
+        await using var actors = new ActorSimulator(brain, stimulated, seed: seed, trial: trial, rateHz: rate, regionOf: regionOf);
         var actual = await actors.RunAsync(steps);
         var actorTime = clock.Elapsed;
 
         int firstDiff = Enumerable.Range(0, Math.Min(expected.Count, actual.Count)).FirstOrDefault(k => expected[k] != actual[k], -1);
         bool same = expected.SequenceEqual(actual);
         Console.WriteLine($"array:  {expected.Count:N0} spikes from {expected.Select(s => s.Neuron).Distinct().Count()} neurons in {arrayTime.TotalSeconds:F2}s");
+        Console.WriteLine($"{(regions > 0 ? $"{regions} regions" : "neuron actors")}:");
         Console.WriteLine($"actors: {actual.Count:N0} spikes from {actual.Select(s => s.Neuron).Distinct().Count()} neurons in {actorTime.TotalSeconds:F2}s");
         Console.WriteLine(same ? "identical spike trains" : $"DIFFERENT, first at spike #{firstDiff}");
         return same ? 0 : 1;
+    }
+
+    case "bench":
+    {
+        var array = new ArraySimulator(brain, seed: seed);
+        array.Stimulate(stimulated, rate);
+        var expected = new List<(long Step, int Neuron)>();
+        clock.Restart();
+        for (long s = 0; s < steps; s++)
+            foreach (int i in array.Advance()) expected.Add((s, i));
+        double simSeconds = steps * LifParams.Default.Dt / 1000;
+
+        Console.WriteLine($"{brain.NeuronCount:N0} neurons, {steps * LifParams.Default.Dt:N0} ms simulated, {expected.Count:N0} spikes, {Environment.ProcessorCount} cores");
+        Console.WriteLine("| mode | wall s | steps/s | x real time | matches array |");
+        Console.WriteLine("|---|---|---|---|---|");
+        void Row(string mode, double wall, bool same) =>
+            Console.WriteLine($"| {mode} | {wall:F2} | {steps / wall:N0} | {simSeconds / wall:F3} | {(same ? "yes" : "NO")} |");
+        Row("array, 1 thread", clock.Elapsed.TotalSeconds, true);
+
+        var modes = opts.GetValueOrDefault("regions", "8,32,128").Split(',').Select(int.Parse).Select(k => (Name: $"{k} region actors", Regions: (int?)k)).ToList();
+        if (opts.GetValueOrDefault("neurons") == "true") modes.Add(("one actor per neuron", null));
+        bool allSame = true;
+        foreach (var (name, k) in modes)
+        {
+            int[]? regionOf = k is { } count ? [.. Enumerable.Range(0, brain.NeuronCount).Select(i => (int)((long)i * count / brain.NeuronCount))] : null;
+            clock.Restart();
+            await using var actors = new ActorSimulator(brain, stimulated, seed: seed, rateHz: rate, regionOf: regionOf);
+            double setup = clock.Elapsed.TotalSeconds;
+            var actual = await actors.RunAsync(steps);
+            bool same = expected.SequenceEqual(actual);
+            allSame &= same;
+            Row($"{name} (+{setup:F1} s setup)", clock.Elapsed.TotalSeconds - setup, same);
+        }
+        return allSame ? 0 : 1;
     }
 }
 
